@@ -1,0 +1,157 @@
+Welcome to "At Home Modifier" hack of xf86-input-evdev.  The original
+README is moved to README.orig.
+
+What it is
+==========
+It enables for example "shift/space dual role key." When you press the
+space key alone, it's a space; but when you press it with another key,
+it's a shift. Any pair of keys is possible.
+
+More precisely, you specify pairs of two keycodes, the "original", and
+the "translated". The last event gets recorded in this patch.  After
+the press of one of "original" keys, the driver instead reports a
+tranlated key press event. When an original key is released, it sends
+a release of the tranlated key. And it sends a press and release of
+the original key if necessary, judging from the last event.
+
+Get it
+======
+
+Download
+--------
+For the first time, install git, and clone as 
+$ cd some/dir
+$ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
+
+You can receive updates by
+$ cd some/dir/at-home-modifier
+$ git pull
+
+Install
+-------
+Gentoo Linux users can use the ebuild file included in the source
+tree. I don't know other Linuxes.
+
+Versions
+--------
+Currently there's only one release: get the git tag "ahm-2.5.0".
+
+Usage
+=====
+First, know the keycodes you need, which are numbers assigned to each
+physical key. It's easiest to install and invoke "xev" commands. It
+says space is 65, and left shift is 50. Ok. Then write your xorg.conf:
+
+Section "InputClass"
+    Identifier "my keyboard"
+    Driver "evdev"
+    Option "XKBOptions" "terminate:ctrl_alt_bksp" # and so on
+
+    # If you save this file under xorg.conf.d/ :
+    Option "AutoServerLayout" "on"
+
+    MatchIsKeyboard "on"
+    Option "TransMod" "65:50" # *** Look here ***
+EndSection
+
+Of course, you can use any keys. "f" & "j" (and so on) may be good.
+If you want to specify multiple pairs, seperate them with whitespaces,
+like this:
+    Option "TransMod" "65:240 102:241 100:241" # My case
+
+More on keycodes
+----------------
+It's good to know that you can also tell keycodes by looking at
+/usr/share/X11/xkb/keycodes/evdev in order to customize the keyboard
+layout with XKB. For example that file says:
+
+      <SPCE> = 65;
+      ...
+      <LFSH> = 50;
+
+Ok, but what's this?
+      <AE02> = 11;
+
+Hm, if you use for example Italian layout, see
+/usr/share/X11/xkb/symbols/it. It has lines:
+
+xkb_symbols "basic" {
+   ...
+   key <AE02>  { [         2,   quotedbl,  twosuperior, dead_doubleacute ] };
+   ...
+}
+
+xkb_symbols "nodeadkeys" {
+    // Modifies the basic italian layout to eliminate all dead keys
+    ...
+    key <AE02>  { [         2,   quotedbl,  twosuperior,  doubleacute ] };
+    ...
+}
+
+Aha, so it's basically "2".
+
+Limitations
+===========
+Each device is unaware of others. If you press your translated shift
+with a left click, it works as shift, but the original key event is
+generated after it too.
+
+This is a mere hack. The correct way will be to implement this in
+"XKB2", which is not yet put into Xorg.
+
+Random bits
+===========
+
+Will this patch speed up typing?
+--------------------------------
+In my case, it didn't. But I (or my hands) feel far better and I can't
+do without this patch any more.
+
+In fact, it slows down a bit. Fast succesive typing sometimes
+turns the space into a modifier. And I press the space to use as a
+modifier, but I change my mind, and release it, and there comes an
+unwanted space.
+
+Warning: Health issue
+---------------------
+This hack is likely to reduce the use of your pinkies, and the risk of
+their injury like RSI. However, overuse of keyboards can damage *any*
+digits, although pinkies are most vulnerable. 
+
+Good keyboards
+--------------
+If you can buy a Japanese keyboard, I recommend one. The Japanese
+keyboard is a "cheap Kinesis"; the space key is short, and there're
+keys around the space key which can be easily pressed with thumbs.
+(Have you ever heard of Kinesis?) See for example
+http://en.wikipedia.org/wiki/Keyboard_layout
+
+But it's only layout. I can't assure the overall quality. Of course
+it's better to try before you buy...
+
+FYI: mine is OWL-KB86STD made by Owltech.
+
+History
+=======
+What was proposed origially was called "SandS" - stands for "Space and
+Shift" - which dates back to year 2001.[1] There's a Mac implementation.
+
+In 2008 one implemented it for X keyboard driver.[2] Then came a port
+to evdev driver.[3] But they were not good enough; you can only use
+physical shift, alt, and space keys.
+
+My code is based on the last patch.
+
+[1] (Japanese) http://hp.vector.co.jp/authors/VA002116/sands/
+[2] (Japanese)
+http://dev.ariel-networks.com/Members/matsuyama/keyboard-customize
+[3] (Japanese):
+http://d.hatena.ne.jp/jeneshicc/20100306/1267843799
+
+Copyright
+=========
+Distributed with MIT License; Same as Xorg.
+
+Author
+======
+Teika kazura <teika **at** lavabit **dot** com>
