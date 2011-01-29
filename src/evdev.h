@@ -133,6 +133,9 @@ typedef struct {
     int delta[REL_CNT];
     unsigned int abs, rel;
 
+    int                 lastScanCode;
+    unsigned int        * transModTable;
+
     /* XKB stuff has to be per-device rather than per-driver */
 #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5
     XkbComponentNamesRec    xkbnames;

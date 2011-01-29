@@ -76,6 +76,8 @@
 #define KanaMask	Mod4Mask
 #define ScrollLockMask	Mod5Mask
 
+#define MAX_TRANS 256
+
 #define CAPSFLAG	1
 #define NUMFLAG		2
 #define SCROLLFLAG	4
@@ -262,13 +264,23 @@ static int wheel_down_button = 5;
 static int wheel_left_button = 6;
 static int wheel_right_button = 7;
 
+static void
+EvdevEnqueKeyEvent(EvdevPtr pEvdev, int code, int value)
+{
+    EventQueuePtr pQueue = &pEvdev->queue[pEvdev->num_queue];
+    pQueue->type = EV_QUEUE_KEY;
+    pQueue->key = code;
+    pQueue->val = value;
+    pEvdev->num_queue++;
+}
+
 void
 EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
 {
     int code = ev->code + MIN_KEYCODE;
-    EventQueuePtr pQueue;
     EvdevPtr pEvdev = pInfo->private;
 
+    unsigned int * transModTable = pEvdev->transModTable;
     /* Filter all repeated events from device.
        We'll do softrepeat in the server, but only since 1.6 */
     if (value == 2
@@ -289,11 +301,20 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
         return;
     }
 
-    pQueue = &pEvdev->queue[pEvdev->num_queue];
-    pQueue->type = EV_QUEUE_KEY;
-    pQueue->key = code;
-    pQueue->val = value;
-    pEvdev->num_queue++;
+    if(transModTable[code]){
+      if(value){
+	EvdevEnqueKeyEvent(pEvdev, transModTable[code], TRUE);
+      }else{
+	EvdevEnqueKeyEvent(pEvdev, transModTable[code], FALSE);
+	if(pEvdev->lastScanCode == code){
+	  EvdevEnqueKeyEvent(pEvdev, code, TRUE);
+	  EvdevEnqueKeyEvent(pEvdev, code, FALSE);
+	}
+      }
+    }else{
+      EvdevEnqueKeyEvent(pEvdev, code, value);
+    }
+    pEvdev->lastScanCode = code;
 }
 
 void
@@ -1100,6 +1121,7 @@ EvdevAddKeyClass(DeviceIntPtr device)
 
     pInfo = device->public.devicePrivate;
     pEvdev = pInfo->private;
+    pEvdev->lastScanCode = 0;
 
     /* sorry, no rules change allowed for you */
     xf86ReplaceStrOption(pInfo->options, "xkb_rules", "evdev");
@@ -2125,6 +2147,58 @@ EvdevPreInit(InputDriverPtr drv, IDevPtr dev, int flags)
         EvdevWheelEmuPreInit(pInfo);
         EvdevDragLockPreInit(pInfo);
     }
+
+    if (pEvdev->flags & EVDEV_KEYBOARD_EVENTS)
+      {
+	unsigned int *transModTable = (unsigned int *) calloc (MAX_TRANS, sizeof(unsigned int) );
+	pEvdev->transModTable = transModTable;
+	char *str;
+	char *next = NULL;
+	char *end = NULL;
+	int fromCode = 0, toCode = 0;
+
+	str = xf86CheckStrOption(pInfo->options, "TransMod",NULL);
+	if(str){
+	  next = str;
+	  while(next != NULL){
+	    fromCode = strtol(next, &end, 10);
+	    if (next == end){
+	      break;
+	    }
+	    if (*end != ':'){
+	      xf86Msg(X_ERROR, "%s: TransMod : "
+		      "Dest keycode is lacking; colon expected: %s\n",
+		      pInfo->name, str);
+	      break;
+	    }
+	    end++;
+	    next = end;
+	    toCode = strtol(next, &end, 10);
+	    if(next == end){
+	      xf86Msg(X_ERROR, "%s: TransMod : "
+		      "Dest keycode is lacking: %s\n",
+		      pInfo->name, str);
+	    }
+	    next = end;
+	    /* xxx do range check, and store */
+	    xf86Msg(X_CONFIG, "%s: TransMod: %i -> %i\n",
+		    pInfo->name, fromCode, toCode);
+	    if((fromCode < MIN_KEYCODE) || (fromCode >= MAX_TRANS)){
+	      xf86Msg(X_ERROR, "%s: TransMod : "
+		      "Keycode out of range: %i\n",
+		      pInfo->name, fromCode);
+	      continue;
+	    }
+	    if((toCode < MIN_KEYCODE) || (toCode >= MAX_TRANS)){
+	      xf86Msg(X_ERROR, "%s: TransMod : "
+		      "Keycode out of range: %i\n",
+		      pInfo->name, toCode);
+	      continue;
+	    }
+	    transModTable[fromCode] = toCode;
+	  }
+	}
+      }
 
     return pInfo;
 
