@@ -1,11 +1,26 @@
 Welcome to "At Home Modifier" hack of xf86-input-evdev.  The original
 README is moved to README.orig.
 
+Contents
+========
+* What it is
+* Get it
+* Usage
+* Limitations
+* Project Home
+* Bugs, Wish list
+* Random bits
+* History
+* Copyright
+
 What it is
 ==========
 It enables for example "shift/space dual role key." When you press the
 space key alone, it's a space; but when you press it with another key,
-it's a shift. Any pair of keys is possible.
+it's a shift. Any pairs of keys are possible.
+
+With this hack, your hands can stay at the home position almost
+always, and feel more "at home", thus "At Home Modifier".
 
 More precisely, you specify pairs of two keycodes, the "original", and
 the "translated". The last event gets recorded in this patch.  After
@@ -20,21 +35,31 @@ Get it
 Download
 --------
 For the first time, install git, and clone as 
-$ cd some/dir
-$ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
+  $ cd some/dir
+  $ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
 
 You can receive updates by
-$ cd some/dir/at-home-modifier
-$ git pull
+  $ cd some/dir/at-home-modifier
+  $ git pull
+
+Or, you can download the tarball from
+http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
+
+Version tags
+------------
+So far, there's releases ahm-2.5.0 & ahm-2.5.1. Command
+  $ git tag -l "ahm*"
+lists all releases.
+
+ahm-x.y.z is based on the upstream x.y.0 = xf86-input-evdev-x.y.0.
+
+You can see the difference to the original code by:
+  $ git diff xf86-input-evdev-2.5.0..ahm-2.5.0
 
 Install
 -------
 Gentoo Linux users can use the ebuild file included in the source
 tree. I don't know other Linuxes.
-
-Versions
---------
-Currently there's only one release: get the git tag "ahm-2.5.0".
 
 Usage
 =====
@@ -42,7 +67,7 @@ First, know the keycodes you need, which are numbers assigned to each
 physical key. It's easiest to install and invoke "xev" commands. It
 says space is 65, and left shift is 50. Ok. Then write your xorg.conf:
 
-Section "InputClass"
+  Section "InputClass"
     Identifier "my keyboard"
     Driver "evdev"
     Option "XKBOptions" "terminate:ctrl_alt_bksp" # and so on
@@ -52,12 +77,17 @@ Section "InputClass"
 
     MatchIsKeyboard "on"
     Option "TransMod" "65:50" # *** Look here ***
-EndSection
+  EndSection
 
-Of course, you can use any keys. "f" & "j" (and so on) may be good.
-If you want to specify multiple pairs, seperate them with whitespaces,
-like this:
-    Option "TransMod" "65:240 102:241 100:241" # My case
+Of course, you can use any keys. "d" & "k" (and so on) may be good.
+(When you want to capitalize the left-hand keys, press "k", and "d"
+for right-hands. This may sound too complex, but you'll be soon
+accustomed.) If you want to specify multiple pairs, seperate them
+with whitespaces, like this:
+
+  Option "TransMod" "65:240 102:241 100:241" # My case
+
+Don't forget to restart X!
 
 More on keycodes
 ----------------
@@ -65,30 +95,30 @@ It's good to know that you can also tell keycodes by looking at
 /usr/share/X11/xkb/keycodes/evdev in order to customize the keyboard
 layout with XKB. For example that file says:
 
-      <SPCE> = 65;
-      ...
-      <LFSH> = 50;
+    <SPCE> = 65;
+    ...
+    <LFSH> = 50;
 
 Ok, but what's this?
-      <AE02> = 11;
+    <AE02> = 11;
 
 Hm, if you use for example Italian layout, see
 /usr/share/X11/xkb/symbols/it. It has lines:
 
-xkb_symbols "basic" {
+  xkb_symbols "basic" {
    ...
    key <AE02>  { [         2,   quotedbl,  twosuperior, dead_doubleacute ] };
    ...
-}
+  }
 
-xkb_symbols "nodeadkeys" {
+  xkb_symbols "nodeadkeys" {
     // Modifies the basic italian layout to eliminate all dead keys
     ...
     key <AE02>  { [         2,   quotedbl,  twosuperior,  doubleacute ] };
     ...
-}
+  }
 
-Aha, so it's basically "2".
+Aha, so that key is basically "2".
 
 Limitations
 ===========
@@ -97,7 +127,36 @@ with a left click, it works as shift, but the original key event is
 generated after it too.
 
 This is a mere hack. The correct way will be to implement this in
-"XKB2", which is not yet put into Xorg.
+"XKB2", which is not yet put into Xorg. If you want this to be
+merged in Xorg, please help X input driver developers.
+
+Project Home
+============
+* Home: http://gitorious.org/at-home-modifier
+* wiki: http://gitorious.org/at-home-modifier/pages/Home
+
+Author
+------
+Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
+
+You can send me emails only if
+* You've got a patch.
+* You want to take over the mainteance.
+* Or you have some other constructive idea.
+
+Otherwise, use the wiki. Delete "ahm-is-great" in the address.
+
+It's good *not* to trust authors you find on the Web. You may be
+assured to know that I'm a developer of Sawfish window manager:
+  http://sawfish.wikia.com/wiki/User:Teika_kazura
+
+Maintainer wanted
+-----------------
+Please send me an email.
+
+Bugs, Wish list
+===============
+Please see the wiki.
 
 Random bits
 ===========
@@ -133,6 +192,14 @@ FYI: mine is OWL-KB86STD made by Owltech.
 
 History
 =======
+
+Versions
+--------
+* 2.5.1: README update.
+* 2.5.0: Initial release.
+
+Background
+----------
 What was proposed origially was called "SandS" - stands for "Space and
 Shift" - which dates back to year 2001.[1] There's a Mac implementation.
 
@@ -151,7 +218,3 @@ http://d.hatena.ne.jp/jeneshicc/20100306/1267843799
 Copyright
 =========
 Distributed with MIT License; Same as Xorg.
-
-Author
-======
-Teika kazura <teika **at** lavabit **dot** com>
