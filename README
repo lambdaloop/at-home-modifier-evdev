@@ -47,9 +47,8 @@ http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
 
 Version tags
 ------------
-So far, there's releases ahm-2.5.0 & ahm-2.5.1. Command
   $ git tag -l "ahm*"
-lists all releases.
+lists all releases, like ahm-2.5.2.
 
 ahm-x.y.z is based on the upstream x.y.0 = xf86-input-evdev-x.y.0.
 
@@ -120,6 +119,16 @@ Hm, if you use for example Italian layout, see
 
 Aha, so that key is basically "2".
 
+Please!
+-------
+If you think this fork is good, please tell it to others. If it
+doesn't become popular, it remains my personal hack, and it may soon
+become impossible for me to maintain!
+
+Please give your feedback to the wiki. (See below for the location.)
+The host site doesn't provide an access counter, so I can't measure
+the popularity.
+
 Limitations
 ===========
 Each device is unaware of others. If you press your translated shift
@@ -139,20 +148,20 @@ Author
 ------
 Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
 
-You can send me emails only if
+You can send me emails *if*
 * You've got a patch.
 * You want to take over the mainteance.
 * Or you have some other constructive idea.
 
-Otherwise, use the wiki. Delete "ahm-is-great" in the address.
+Otherwise, please use the wiki. Delete "ahm-is-great" in the address.
 
 It's good *not* to trust authors you find on the Web. You may be
-assured to know that I'm a developer of Sawfish window manager:
+reassured to know that I'm a developer of Sawfish window manager:
   http://sawfish.wikia.com/wiki/User:Teika_kazura
 
 Maintainer wanted
 -----------------
-Please send me an email.
+Please take me over. Send me an email.
 
 Bugs, Wish list
 ===============
@@ -195,8 +204,8 @@ History
 
 Versions
 --------
-* 2.5.1: README update.
-* 2.5.0: Initial release.
+* 2.5.2: README update.
+* 2.5.0: Initial release. Forked from upstream 2.5.0.
 
 Background
 ----------
