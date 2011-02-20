@@ -137,7 +137,8 @@ typedef struct {
     unsigned int abs_prox;  /* valuators posted while out of prox? */
 
     int                 lastScanCode;
-    unsigned int        * transModTable;
+    unsigned int        * transModTable; /* [orig keycode] means translated keycode */
+    unsigned int        * transModCount; /* records how many times fold the translated key is pressed */
 
     /* XKB stuff has to be per-device rather than per-driver */
 #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5

@@ -312,6 +312,8 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
     EventQueuePtr pQueue;
 
     unsigned int * transModTable = pEvdev->transModTable;
+    unsigned int * transModCount = pEvdev->transModCount;
+
     int lastScanCode = pEvdev->lastScanCode;
 
     /* Filter all repeated events from device.
@@ -332,11 +334,23 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
       return;
     }
     pEvdev->lastScanCode = code;
+    /* Role of transModCount: suppose both key a and b are translated
+     * to shift. Press a, b, and release b. Then it should be 'B'.
+     * But without transModCount, first the shift would be released,
+     * so lower b be emitted.
+     */
     if(transModTable[code]){
       if(value){
+	transModCount[transModTable[code]]++;
 	EvdevEnqueKeyEvent(pQueue, transModTable[code], TRUE);
       }else{
-	EvdevEnqueKeyEvent(pQueue, transModTable[code], FALSE);
+	transModCount[transModTable[code]]--;
+	if(transModCount[transModTable[code]] == 0){
+	  EvdevEnqueKeyEvent(pQueue, transModTable[code], FALSE);
+	}else{
+	  pEvdev->num_queue--;
+	}
+	
 	if(lastScanCode == code){
 	  if ((pQueue = EvdevNextInQueue(pInfo)) == NULL){
 	    return;
@@ -349,7 +363,17 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
 	}
       }
     }else{
-      EvdevEnqueKeyEvent(pQueue, code, value);
+      if(value){
+	transModCount[code]++;
+	EvdevEnqueKeyEvent(pQueue, code, TRUE);
+      }else{
+	transModCount[code]--;
+	if(transModCount[code] == 0){
+	  EvdevEnqueKeyEvent(pQueue, code, FALSE);
+	}else{
+	  pEvdev->num_queue--;
+	}
+      }
     }
 }
 
@@ -2299,11 +2323,14 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
     if (pEvdev->flags & EVDEV_KEYBOARD_EVENTS)
       {
 	unsigned int *transModTable = (unsigned int *) calloc (MAX_TRANS, sizeof(unsigned int) );
-	pEvdev->transModTable = transModTable;
+	unsigned int *transModCount = (unsigned int *) calloc (MAX_TRANS, sizeof(unsigned int) );
 	char *str;
 	char *next = NULL;
 	char *end = NULL;
 	int fromCode = 0, toCode = 0;
+
+	pEvdev->transModTable = transModTable;
+	pEvdev->transModCount = transModCount;
 
 	str = xf86CheckStrOption(pInfo->options, "TransMod",NULL);
 	if(str){
