@@ -40,6 +40,9 @@ http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
 
 This version is always a released version, not under development, unstable one.
 
+You can also download the patch against the xf86-input-evdev from the
+website.
+
 git
 ---
 Git access is available, too. For the first time, install git, and clone as 
@@ -127,9 +130,9 @@ Aha, so that key is basically "2".
 
 Please!
 -------
-If you think this fork is good, please tell it to others. If it
-doesn't become popular, it remains my personal hack, and it may soon
-become impossible for me to maintain!
+If you think this fork is good, please tell it to others, at blog,
+forum, etc. If it doesn't become popular, it remains my personal hack,
+and it may soon become impossible for me to maintain!
 
 Please give your feedback at the project web site. The host site
 doesn't provide an access counter, so I can't measure the popularity.
@@ -213,13 +216,13 @@ Versions
 Background
 ----------
 What was proposed origially was called "SandS" - stands for "Space and
-Shift" - which dates back to year 2001, by "BEMU".[1] There's a Mac
-implementation.
+Shift" - which dates back to year 2001, by K. Kimura.[1] There's 
+implementation in Mac and Win.
 
-In 2008 "T. Matsuyama" implemented it for X keyboard driver.[2] Then
-came a port to evdev driver by "jeneshicc".[3] But they were not good
-enough; you can only use physical shift, alt, and space keys. My code
-is based on the last patch.
+In 2008 T. Matsuyama implemented it for X keyboard driver.[2] Then
+came a port to evdev driver by "jeneshicc".[3] But they lack
+generality; you can only use physical shift, alt, and space keys. My
+code is based on the last patch.
 
 [1] (Japanese) http://hp.vector.co.jp/authors/VA002116/
 [2] (Japanese)
