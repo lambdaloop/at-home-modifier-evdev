@@ -17,7 +17,8 @@ What it is
 ==========
 It enables for example "shift/space dual role key." When you press the
 space key alone, it's a space; but when you press it with another key,
-it's a shift. Any pairs of keys are possible.
+it's a shift. Any pairs of keys are possible. It is a fork of evdev
+driver = xf86-input-evdev.
 
 With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
@@ -34,16 +35,20 @@ Get it
 
 Download
 --------
-For the first time, install git, and clone as 
+The tar.bz2 is here:
+http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
+
+This version is always a released version, not under development, unstable one.
+
+git
+---
+Git access is available, too. For the first time, install git, and clone as 
   $ cd some/dir
   $ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
 
 You can receive updates by
   $ cd some/dir/at-home-modifier
   $ git pull
-
-Or, you can download the tarball from
-http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
 
 Version tags
 ------------
@@ -58,7 +63,8 @@ You can see the difference to the original code by:
 Install
 -------
 Gentoo Linux users can use the ebuild file included in the source
-tree. I don't know other Linuxes.
+tree. Other Linux users can install it by replacing xf86-input-evdev.
+I'd appreciate it a lot if you could send me your distro support.
 
 Usage
 =====
@@ -125,9 +131,8 @@ If you think this fork is good, please tell it to others. If it
 doesn't become popular, it remains my personal hack, and it may soon
 become impossible for me to maintain!
 
-Please give your feedback to the wiki. (See below for the location.)
-The host site doesn't provide an access counter, so I can't measure
-the popularity.
+Please give your feedback at the project web site. The host site
+doesn't provide an access counter, so I can't measure the popularity.
 
 Limitations
 ===========
@@ -141,19 +146,13 @@ merged in Xorg, please help X input driver developers.
 
 Project Home
 ============
-* Home: http://gitorious.org/at-home-modifier
-* wiki: http://gitorious.org/at-home-modifier/pages/Home
+http://gitorious.org/at-home-modifier/pages/Home
 
 Author
 ------
 Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
 
-You can send me emails *if*
-* You've got a patch.
-* You want to take over the mainteance.
-* Or you have some other constructive idea.
-
-Otherwise, please use the wiki. Delete "ahm-is-great" in the address.
+Delete "ahm-is-great" in the address.
 
 It's good *not* to trust authors you find on the Web. You may be
 reassured to know that I'm a developer of Sawfish window manager:
@@ -161,11 +160,11 @@ reassured to know that I'm a developer of Sawfish window manager:
 
 Maintainer wanted
 -----------------
-Please take me over. Send me an email.
+Please, take me over.
 
 Bugs, Wish list
 ===============
-Please see the wiki.
+Please see the web site.
 
 Random bits
 ===========
@@ -191,11 +190,15 @@ Good keyboards
 If you can buy a Japanese keyboard, I recommend one. The Japanese
 keyboard is a "cheap Kinesis"; the space key is short, and there're
 keys around the space key which can be easily pressed with thumbs.
-(Have you ever heard of Kinesis?) See for example
+(Have you ever heard of Kinesis Contoured Keyboard?) See for example
 http://en.wikipedia.org/wiki/Keyboard_layout
 
-But it's only layout. I can't assure the overall quality. Of course
-it's better to try before you buy...
+But it's only the layout. I can't assure the overall quality. Of course
+it's better to try before you buy.
+
+"Realforce" keyboard made by Topre is unique with capacitive key
+switch whose touch is really soft. HHK (= Happy Hacking Keyboard)
+Professional also uses Topre's switch.
 
 FYI: mine is OWL-KB86STD made by Owltech.
 
@@ -204,21 +207,21 @@ History
 
 Versions
 --------
-* 2.5.2: README update.
-* 2.5.0: Initial release. Forked from upstream 2.5.0.
+* 2.5.3: README update. Authors of earlier implementations are recorded.
+* 2.5.0: Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
 Background
 ----------
 What was proposed origially was called "SandS" - stands for "Space and
-Shift" - which dates back to year 2001.[1] There's a Mac implementation.
+Shift" - which dates back to year 2001, by "BEMU".[1] There's a Mac
+implementation.
 
-In 2008 one implemented it for X keyboard driver.[2] Then came a port
-to evdev driver.[3] But they were not good enough; you can only use
-physical shift, alt, and space keys.
+In 2008 "T. Matsuyama" implemented it for X keyboard driver.[2] Then
+came a port to evdev driver by "jeneshicc".[3] But they were not good
+enough; you can only use physical shift, alt, and space keys. My code
+is based on the last patch.
 
-My code is based on the last patch.
-
-[1] (Japanese) http://hp.vector.co.jp/authors/VA002116/sands/
+[1] (Japanese) http://hp.vector.co.jp/authors/VA002116/
 [2] (Japanese)
 http://dev.ariel-networks.com/Members/matsuyama/keyboard-customize
 [3] (Japanese):
