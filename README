@@ -53,7 +53,7 @@ You can receive updates by
 Version tags
 ------------
   $ git tag -l "ahm*"
-lists all releases, like ahm-2.5.2.
+lists all releases, like ahm-2.5.1.
 
 ahm-x.y.z is based on the upstream x.y.0 = xf86-input-evdev-x.y.0.
 
@@ -207,7 +207,7 @@ History
 
 Versions
 --------
-* 2.5.3: README update. Authors of earlier implementations are recorded.
+* 2.5.1: README update. Authors of earlier implementations are recorded.
 * 2.5.0: Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
 Background
