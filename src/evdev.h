@@ -109,6 +109,7 @@ typedef struct {
     enum {
         EV_QUEUE_KEY,	/* xf86PostKeyboardEvent() */
         EV_QUEUE_BTN,	/* xf86PostButtonEvent() */
+        EV_QUEUE_PROXIMITY, /* xf86PostProximityEvent() */
     } type;
     int key;		/* May be either a key code or button number. */
     int val;		/* State of the key/button; pressed or released. */
@@ -124,14 +125,16 @@ typedef struct {
     int old_vals[MAX_VALUATORS]; /* Translate absolute inputs to relative */
 
     int flags;
-    int tool;
+    int in_proximity;           /* device in proximity */
+    int use_proximity;          /* using the proximity bit? */
     int num_buttons;            /* number of buttons */
     BOOL swap_axes;
     BOOL invert_x;
     BOOL invert_y;
 
     int delta[REL_CNT];
-    unsigned int abs, rel;
+    unsigned int abs_queued, rel_queued, prox_queued;
+    unsigned int abs_prox;  /* valuators posted while out of prox? */
 
     int                 lastScanCode;
     unsigned int        * transModTable;
@@ -201,11 +204,12 @@ typedef struct {
 /* Event posting functions */
 void EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
 void EvdevQueueButtonEvent(InputInfoPtr pInfo, int button, int value);
+void EvdevQueueProximityEvent(InputInfoPtr pInfo, int value);
 void EvdevPostButtonEvent(InputInfoPtr pInfo, int button, int value);
 void EvdevQueueButtonClicks(InputInfoPtr pInfo, int button, int count);
-void EvdevPostRelativeMotionEvents(InputInfoPtr pInfo, int *num_v, int *first_v,
+void EvdevPostRelativeMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
 				   int v[MAX_VALUATORS]);
-void EvdevPostAbsoluteMotionEvents(InputInfoPtr pInfo, int *num_v, int *first_v,
+void EvdevPostAbsoluteMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
 				   int v[MAX_VALUATORS]);
 unsigned int EvdevUtilButtonEventToButtonNumber(EvdevPtr pEvdev, int code);
 
