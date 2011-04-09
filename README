@@ -4,10 +4,11 @@ README is moved to README.orig.
 Contents
 ========
 * What it is
+* Web site
 * Get it
 * Usage
 * Limitations
-* Project Home
+* Author
 * Bugs, Wish list
 * Random bits
 * History
@@ -30,15 +31,17 @@ tranlated key press event. When an original key is released, it sends
 a release of the tranlated key. And it sends a press and release of
 the original key if necessary, judging from the last event.
 
+Web site
+========
+http://gitorious.org/at-home-modifier/pages/Home
+
 Get it
 ======
 
 Download
 --------
-The tar.bz2 is here:
-http://gitorious.org/at-home-modifier/at-home-modifier/archive-tarball/master
-
-This version is always a released version, not under development, unstable one.
+The tar.gz is here:
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.0.tar.gz
 
 You can also download the patch against the xf86-input-evdev from the
 website.
@@ -58,15 +61,14 @@ Version tags
   $ git tag -l "ahm*"
 lists all releases, like ahm-2.5.1.
 
-ahm-x.y.z is based on the upstream x.y.0 = xf86-input-evdev-x.y.0.
-
 You can see the difference to the original code by:
   $ git diff xf86-input-evdev-2.5.0..ahm-2.5.0
 
 Install
 -------
-Gentoo Linux users can use the ebuild file included in the source
-tree. Other Linux users can install it by replacing xf86-input-evdev.
+Gentoo Linux users can use the ebuild file. Get it from the web site.
+
+Other Linux users can install it by replacing xf86-input-evdev.
 I'd appreciate it a lot if you could send me your distro support.
 
 Usage
@@ -93,9 +95,13 @@ for right-hands. This may sound too complex, but you'll be soon
 accustomed.) If you want to specify multiple pairs, seperate them
 with whitespaces, like this:
 
-  Option "TransMod" "65:240 102:241 100:241" # My case
+  Option "TransMod" "65:240 102:241 100:241"
 
 Don't forget to restart X!
+
+The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab with the overlay
+Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards have many keys you can
+press with thumbs.)
 
 More on keycodes
 ----------------
@@ -147,12 +153,8 @@ This is a mere hack. The correct way will be to implement this in
 "XKB2", which is not yet put into Xorg. If you want this to be
 merged in Xorg, please help X input driver developers.
 
-Project Home
-============
-http://gitorious.org/at-home-modifier/pages/Home
-
 Author
-------
+======
 Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
 
 Delete "ahm-is-great" in the address.
@@ -167,7 +169,27 @@ Please, take me over.
 
 Bugs, Wish list
 ===============
-Please see the web site.
+
+Fixed bugs
+----------
+* In 2.6.0;
+  "Double shift bug": Suppose both key a and b are translated to
+  shift. Press a, b, and release b.  Then it should be 'B', but it
+  used to emit lower b. It's because the release of shift was sent
+  before b key press.
+
+Known bugs
+---------
+* Hotplug failure: Sometimes modifiers get locked immediately after
+  hotplugging a keyboard. Try replug, or s2ram may fix.
+
+Wishes
+------
+* "Fast type support": Suppose you press space/shift, meaning as a
+  space. If you type too fast, the next key, say lower x, becomes X.
+  It may be better if it's recognized as x when the space/shift is
+  released before x.
+  I may write a fix.
 
 Random bits
 ===========
@@ -175,7 +197,8 @@ Random bits
 Will this patch speed up typing?
 --------------------------------
 In my case, it didn't. But I (or my hands) feel far better and I can't
-do without this patch any more.
+do without this patch any more. It's less tiring, so it may be more
+efficient if you use keyboard for long time in a day.
 
 In fact, it slows down a bit. Fast succesive typing sometimes
 turns the space into a modifier. And I press the space to use as a
@@ -186,7 +209,8 @@ Warning: Health issue
 ---------------------
 This hack is likely to reduce the use of your pinkies, and the risk of
 their injury like RSI. However, overuse of keyboards can damage *any*
-digits, although pinkies are most vulnerable. 
+digits and other parts of your hand, although pinkies are most
+vulnerable.
 
 Good keyboards
 --------------
@@ -200,8 +224,8 @@ But it's only the layout. I can't assure the overall quality. Of course
 it's better to try before you buy.
 
 "Realforce" keyboard made by Topre is unique with capacitive key
-switch whose touch is really soft. HHK (= Happy Hacking Keyboard)
-Professional also uses Topre's switch.
+switch whose touch is really soft. "HHK Professional" (HHK = Happy
+Hacking Keyboard) also uses Topre's switch.
 
 FYI: mine is OWL-KB86STD made by Owltech.
 
@@ -210,14 +234,15 @@ History
 
 Versions
 --------
-* 2.5.1: README update. Authors of earlier implementations are recorded.
+* 2.6.0: Merged upstrem 2.6.0. "Double shift bug" is fixed.
+* 2.5.1: Minor documentation updates.
 * 2.5.0: Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
 Background
 ----------
 What was proposed origially was called "SandS" - stands for "Space and
 Shift" - which dates back to year 2001, by K. Kimura.[1] There's 
-implementation in Mac and Win.
+implementations in Mac and Win.
 
 In 2008 T. Matsuyama implemented it for X keyboard driver.[2] Then
 came a port to evdev driver by "jeneshicc".[3] But they lack
@@ -230,6 +255,6 @@ http://dev.ariel-networks.com/Members/matsuyama/keyboard-customize
 [3] (Japanese):
 http://d.hatena.ne.jp/jeneshicc/20100306/1267843799
 
-Copyright
-=========
-Distributed with MIT License; Same as Xorg.
+License
+=======
+Distributed under MIT License; Same as Xorg.
