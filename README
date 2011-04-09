@@ -234,9 +234,9 @@ History
 
 Versions
 --------
-* 2.6.0: Merged upstrem 2.6.0. "Double shift bug" is fixed.
-* 2.5.1: Minor documentation updates.
-* 2.5.0: Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
+* 2.6.0 (apr 2011): Merged upstrem 2.6.0. "Double shift bug" is fixed.
+* 2.5.1 (feb 2011): Minor documentation updates.
+* 2.5.0 (feb 2011): Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
 Background
 ----------
