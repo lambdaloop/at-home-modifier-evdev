@@ -48,7 +48,7 @@ website.
 
 git
 ---
-Git access is available, too. For the first time, install git, and clone as 
+Git access is available, too. For the first time, install git, and clone as
   $ cd some/dir
   $ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
 
@@ -153,6 +153,8 @@ This is a mere hack. The correct way will be to implement this in
 "XKB2", which is not yet put into Xorg. If you want this to be
 merged in Xorg, please help X input driver developers.
 
+See also bugs and "not a bug" sections below.
+
 Author
 ======
 Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
@@ -182,6 +184,17 @@ Known bugs
 ---------
 * Hotplug failure: Sometimes modifiers get locked immediately after
   hotplugging a keyboard. Try replug, or s2ram may fix.
+
+Not a bug
+---------
+Many keyboards fail to send some combinations of key presses. For
+example, mine doesn't report Left-alt + space + cursor-down and
+alt + space + delete (whereas alt + space + up is dispatched!!)
+All normal symbol keys pressed with alt + space work.
+
+Keyboards with "n-key rollover" are the solution, and completely ok
+for this hack, but they may be expensive. (USB connection can't report
+7 or more simultaneous presses, but it doesn't matter for us.)
 
 Wishes
 ------
@@ -227,6 +240,9 @@ it's better to try before you buy.
 switch whose touch is really soft. "HHK Professional" (HHK = Happy
 Hacking Keyboard) also uses Topre's switch.
 
+See also "not a bug" section above. Kinesis contoured, Realforce and
+HHK Professional come with n-key rollover.
+
 FYI: mine is OWL-KB86STD made by Owltech.
 
 History
@@ -241,7 +257,7 @@ Versions
 Background
 ----------
 What was proposed origially was called "SandS" - stands for "Space and
-Shift" - which dates back to year 2001, by K. Kimura.[1] There's 
+Shift" - which dates back to year 2001, by K. Kimura.[1] There's
 implementations in Mac and Win.
 
 In 2008 T. Matsuyama implemented it for X keyboard driver.[2] Then
