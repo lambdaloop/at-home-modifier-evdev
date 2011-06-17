@@ -66,7 +66,9 @@ You can see the difference to the original code by:
 
 Install
 -------
-Gentoo Linux users can use the ebuild file. Get it from the web site.
+* Gentoo Linux users can use the ebuild file. Get it from the web site.
+* Arch Linux AUR repository entry is:
+  https://aur.archlinux.org/packages.php?ID=49546
 
 Other Linux users can install it by replacing xf86-input-evdev.
 I'd appreciate it a lot if you could send me your distro support.
