@@ -1,4 +1,4 @@
-Welcome to "At Home Modifier" hack of xf86-input-evdev.  The original
+Welcome to "At Home Modifier" hack of xf86-input-evdev. The original
 README is moved to README.orig.
 
 Contents
@@ -7,11 +7,11 @@ Contents
 * Web site
 * Get it
 * Usage
-* Limitations
 * Author
 * Bugs, Wish list
 * Random bits
 * History
+* Source code
 * Copyright
 
 What it is
@@ -27,13 +27,16 @@ always, and feel more "at home", thus "At Home Modifier".
 More precisely, you specify pairs of two keycodes, the "original", and
 the "translated". The last event gets recorded in this patch.  After
 the press of one of "original" keys, the driver instead reports a
-tranlated key press event. When an original key is released, it sends
-a release of the tranlated key. And it sends a press and release of
+translated key press event. When an original key is released, it sends
+a release of the translated key. And it sends a press and release of
 the original key if necessary, judging from the last event.
 
 Web site
 ========
 http://gitorious.org/at-home-modifier/pages/Home
+
+Forum / mailing list is found at:
+http://at-home-modifier.2300353.n4.nabble.com/
 
 Get it
 ======
@@ -41,7 +44,7 @@ Get it
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.0.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.1.tar.gz
 
 You can also download the patch against the xf86-input-evdev from the
 website.
@@ -66,7 +69,7 @@ You can see the difference to the original code by:
 
 Install
 -------
-* Gentoo Linux users can use the ebuild file. Get it from the web site.
+* Gentoo Linux users can use ebuild files. Get one from the web site.
 * Arch Linux AUR repository entry is:
   https://aur.archlinux.org/packages.php?ID=49546
 
@@ -76,9 +79,11 @@ I'd appreciate it a lot if you could send me your distro support.
 Usage
 =====
 First, know the keycodes you need, which are numbers assigned to each
-physical key. It's easiest to install and invoke "xev" commands. It
-says space is 65, and left shift is 50. Ok. Then write your xorg.conf:
+physical key. It's easiest to install and invoke "xev" commands. In my
+case it says space is 65, and left shift is 50. OK. Then write your
+xorg.conf or xorg.conf.d/10-keyboard.conf:
 
+  # For the detail see "man xorg.conf" or your distro doc.
   Section "InputClass"
     Identifier "my keyboard"
     Driver "evdev"
@@ -88,22 +93,119 @@ says space is 65, and left shift is 50. Ok. Then write your xorg.conf:
     Option "AutoServerLayout" "on"
 
     MatchIsKeyboard "on"
-    Option "TransMod" "65:50" # *** Look here ***
+    # Perhaps you want something like one of them:
+    MatchProduct "AT Translated Set 2 keyboard"
+    # MatchUSBID "0566:3029"
+
+    ### at-home-modifier options begin here.
+    # The basic option.
+    Option "TransMod" "65:50 102:241" # Defines key/modifier pairs.
+
+    ## Fine tuning options. Explained in a later section.
+    # For the first time, omit them.
+    # Option "AhmTimeout" "400" # In millisecond.
+    # Option "AhmDelay" "65 102" # Delayed keys.
+    # Option "AhmFreezeTT" "true"
+    # Option "AhmResetTime" "10" # In sec.
   EndSection
 
 Of course, you can use any keys. "d" & "k" (and so on) may be good.
 (When you want to capitalize the left-hand keys, press "k", and "d"
 for right-hands. This may sound too complex, but you'll be soon
-accustomed.) If you want to specify multiple pairs, seperate them
+accustomed.) If you want to specify multiple pairs, separate them
 with whitespaces, like this:
 
   Option "TransMod" "65:240 102:241 100:241"
 
 Don't forget to restart X!
 
-The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab with the overlay
-Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards have many keys you can
-press with thumbs.)
+The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
+right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
+have many keys you can press with thumbs.)
+
+*** Big keycode support ***
+
+If some keys of your keyboard are not supported by X, then this hack
+can be used as a workaround. I don't have such device, thus can't
+guarantee, though.
+
+Some keys are assigned keycodes > 255, and linux input driver *does*
+support them. But X can only accept 255 keys. If you have such keys
+and unused = empty keycodes in X, let them get translated. For this
+use, you can safely forget if the involved keys are modifiers or not.
+It doesn't matter.
+
+Linux keycodes can be checked with "showkey" command. Notice that X
+keycodes have +8 offset from linux ones, e.g. ESC is 1 in linux, and 9
+in X. At-home-modifer accepts X keycodes.
+
+Fine tuning options
+-------------------
+For the first time, skip this section. Come back after you actually
+try.
+
+*** Fast type fix (delay) ***
+
+Users of this hack often have "tongue-twister of finger": Suppose you
+want " x". You first press space/shift, but if you press x and release
+space/shift, you'll get X instead.
+
+To fix it, you can let the driver "delay" the press of space/shift,
+like:
+
+    Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
+
+Then the press of x (or any) following space/shift is "delayed",
+and completes after release of space/shift or x.
+
+There's a trade off. Whenever you want a real shift, you have to
+make sure to release the space/shift afterward.
+
+Notice that *original* keycodes are used in the X configuration file,
+so in this example, 65 = space, not 50 = left shift.
+
+*** Cancellation by long press (timeout) ***
+
+Suppose you were about to input shift + A and pressed space/shift, but
+you changed your mind. If you release the space/shift key, you'll
+receive one space, but it's not what you want!
+
+Actually, a workaround is provided by time-out. A long enough press
+cancels that kind of press. If you have the following line in evdev
+driver configuration,
+
+  Option "AhmTimeout" "400" # In millisecond.
+
+then a single press and release of space/shift key produces nothing if
+the press lasts more than 0.4 sec. The default is 0.6 sec. You can disable
+timeout by setting it to 0.
+
+This feature was suggested by a user known as "bloom" in the Arch
+Linux forum. Thanks.
+
+*** Successive transmod tuning ***
+
+If the boolean option "AhmFreezeTT" is true, then in a sequence of
+"transmod X press, transmod Y press, X release", press of Y is treated
+as the original key, not as the modifier. ("TT" is meant for
+"transmod-transmod".) The default is false.
+
+See also "Corner cases in press and release order" below.
+
+*** Reset ***
+
+Sometimes transmods get frozen, so the workaround is provided; just
+leave the keyboard long enough time (default 10 secs) untouched.
+
+You can change this time with the following option:
+    Option "AhmResetTime" "10" # In sec.
+To disable this feature, set it to 0.
+
+Reset is implemented by sending release events to all translated
+modifiers, and clearing internal variables. The exact time the rest
+is done is the first time you touch the keyboard. The time measurement
+is not exact, by ignoring sub-second values. Thus the maximal error is
+1 sec.
 
 More on keycodes
 ----------------
@@ -111,9 +213,9 @@ It's good to know that you can also tell keycodes by looking at
 /usr/share/X11/xkb/keycodes/evdev in order to customize the keyboard
 layout with XKB. For example that file says:
 
-    <SPCE> = 65;
+    <SPCE> = 65;  // space
     ...
-    <LFSH> = 50;
+    <LFSH> = 50;  // left shift
 
 Ok, but what's this?
     <AE02> = 11;
@@ -142,20 +244,8 @@ If you think this fork is good, please tell it to others, at blog,
 forum, etc. If it doesn't become popular, it remains my personal hack,
 and it may soon become impossible for me to maintain!
 
-Please give your feedback at the project web site. The host site
-doesn't provide an access counter, so I can't measure the popularity.
-
-Limitations
-===========
-Each device is unaware of others. If you press your translated shift
-with a left click, it works as shift, but the original key event is
-generated after it too.
-
-This is a mere hack. The correct way will be to implement this in
-"XKB2", which is not yet put into Xorg. If you want this to be
-merged in Xorg, please help X input driver developers.
-
-See also bugs and "not a bug" sections below.
+Please give your feedback. The host site doesn't provide an access
+counter, so I can't measure the popularity.
 
 Author
 ======
@@ -164,7 +254,7 @@ Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
 Delete "ahm-is-great" in the address.
 
 It's good *not* to trust authors you find on the Web. You may be
-reassured to know that I'm a developer of Sawfish window manager:
+reassured to know that I was a developer of Sawfish window manager:
   http://sawfish.wikia.com/wiki/User:Teika_kazura
 
 Maintainer wanted
@@ -176,16 +266,38 @@ Bugs, Wish list
 
 Fixed bugs
 ----------
-* In 2.6.0;
-  "Double shift bug": Suppose both key a and b are translated to
-  shift. Press a, b, and release b.  Then it should be 'B', but it
-  used to emit lower b. It's because the release of shift was sent
-  before b key press.
+* In 2.6.0
+  ** Double shift bug
+  Suppose both key a and b are translated to shift. Press a, b, and
+  release b.  Then it should be 'B', but it used to emit lower b. It's
+  because the release of shift was sent before b key press.
+
+* In 2.6.1
+  ** Release interference bug
+  Suppose you press x, space/shift, release x, release
+  space/shift. Probably you wanted "x ". But formerly, only "x" is
+  sent. (More precisely, "x" + shift are sent. Don't confuse it with
+  "AhmDelay".)
+
+  ** keycode limit
+  X's keycode limit is 255, but linux input driver's keycode limit is
+  0x2ff. Now it accepts input codes > 255.
+
+  ** Frozen key bug
+  Probably ahm-2.6.0 has introduced a new bug which makes some keys
+  irresponsive.  The bug existed in theory, but the author has never
+  experienced it actually.
+
+  ** Memory leak
+  Previous version had slight memory leaks (almost unnoticeable).
 
 Known bugs
 ---------
-* Hotplug failure: Sometimes modifiers get locked immediately after
-  hotplugging a keyboard. Try replug, or s2ram may fix.
+* Switching VT: When you switch back to X from virtual console with
+  (Ctrl +) Alt + Fxx, ctrl get frozen. This is mitigated with "reset"
+  feature.
+* Random chattering: Sometimes chattering happens. I don't know
+  when.
 
 Not a bug
 ---------
@@ -198,13 +310,50 @@ Keyboards with "n-key rollover" are the solution, and completely ok
 for this hack, but they may be expensive. (USB connection can't report
 7 or more simultaneous presses, but it doesn't matter for us.)
 
+*** Limitations ***
+Each device is unaware of others. If you press your translated shift
+with a left click, it works as shift, but the original key event is
+generated after it too, unless the shift is timed out.
+
+This is a mere hack. The correct way will be to implement this in
+"XKB2", which is not yet put into Xorg. If you want this to be
+merged in Xorg, please help X input driver developers.
+
 Wishes
 ------
-* "Fast type support": Suppose you press space/shift, meaning as a
-  space. If you type too fast, the next key, say lower x, becomes X.
-  It may be better if it's recognized as x when the space/shift is
-  released before x.
-  I may write a fix.
+"Dynamic configuration", or config changes on-the-fly may be good,
+for example enabling some keys only when you're using an input method.
+I don't know anything about socket or inter process communication,
+so please tell me how to do it.
+
+Bug reporting
+-------------
+When you report a bug, please be precise. Don't forget to disable
+autorepeat by
+  $ xset -r
+
+It's better to make AhmResetTime big, and if you enable AhmDelay,
+set it big, too.
+
+I compile with -Wall -Wextra, and my code does not bring in any extra
+warning.
+
+Corner cases in press and release order
+---------------------------------------
+There're many corner cases, and I can't predict all. The option
+"AhmFreezeTT" is easy not only to reason, but also to code, but
+more complicated examples may not be so.
+
+More may be possible, by knowing which keys are modifiers. (This hack
+doesn't use any information which are modifiers. What's done is a
+simple translation.) You can get the required information by Xlib or
+XKB, but it'll be an inverted implementation, fetching the high-level
+part from the raw world. The correct way would be to re-implement all
+in XKB2. (See above for XKB2.)
+
+Or programmable configuration (together with timestamp support),
+something like an automaton, may help.  But don't ask me it. I don't
+know how to design such logic nor to write a parser.
 
 Random bits
 ===========
@@ -212,13 +361,11 @@ Random bits
 Will this patch speed up typing?
 --------------------------------
 In my case, it didn't. But I (or my hands) feel far better and I can't
-do without this patch any more. It's less tiring, so it may be more
-efficient if you use keyboard for long time in a day.
+do without this patch any more. It's much less tiring, so it may be
+more efficient if you use keyboard for long time in a day.
 
-In fact, it slows down a bit. Fast succesive typing sometimes
-turns the space into a modifier. And I press the space to use as a
-modifier, but I change my mind, and release it, and there comes an
-unwanted space.
+In fact, this hack introduces some nicety. Options like delay and
+timeout are intended for the cure, but they bring in others.
 
 Warning: Health issue
 ---------------------
@@ -236,7 +383,7 @@ keys around the space key which can be easily pressed with thumbs.
 http://en.wikipedia.org/wiki/Keyboard_layout
 
 But it's only the layout. I can't assure the overall quality. Of course
-it's better to try before you buy.
+it's better to try before you buy...
 
 "Realforce" keyboard made by Topre is unique with capacitive key
 switch whose touch is really soft. "HHK Professional" (HHK = Happy
@@ -245,22 +392,57 @@ Hacking Keyboard) also uses Topre's switch.
 See also "not a bug" section above. Kinesis contoured, Realforce and
 HHK Professional come with n-key rollover.
 
-FYI: mine is OWL-KB86STD made by Owltech.
+FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
+touch, but I like the layout.
+
+Format of this file
+-------------------
+This file is *not* formatted in markdown, which is not so much
+readable until conversion to HTML.
+
+Alternatives
+============
+There're some alternative candidates of at-home-modifier.
+
+* actkbd: It works by meddling with kernel input, but not updated
+  since 2007. I don't think it's flexible enough.
+  http://users.softlab.ntua.gr/~thkala/projects/actkbd/
+* 窓使いの憂鬱 (Mado-tsukai no yū-utsu; meaning "Spleen of Windows
+  Users") for Linux & Darwin: It's an attempt to port a Windows
+  software to tune keyboards. I've heard that the Windows version
+  enables "SandS" ("space and shift"), but don't know the linux
+  version. Japanese documentation only. Not maintained actively.
+  http://www42.tok2.com/home/negidakude/
 
 History
 =======
 
-Versions
---------
-* 2.6.0 (apr 2011): Merged upstrem 2.6.0. "Double shift bug" is fixed.
+News
+----
+* 2.6.1 (oct 2011):
+  * New features
+    Long press cancellation (Option "AhmTimeout"), fast type fix
+    (Option "AhmDelay"), successive transmod tuning (Option
+    "AhmFreezeTT"), reset (Option "AhmResetTime") are implemented. Big
+    keycode support.
+  * Bugs fixed
+    Release interference bug, keycode limit bug, and 2 other minor
+    bugs are fixed.
+  * Documentation
+    New sections: "Not a bug", "Corner cases", "Alternatives", "Source
+    code".
+    New bug items: "Switching VT" and "Random chattering".
+    New wish item: "Dynamic configuration".
+* 2.6.0 (apr 2011): Merged upstream 2.6.0. "Double shift bug" is fixed.
 * 2.5.1 (feb 2011): Minor documentation updates.
 * 2.5.0 (feb 2011): Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
 Background
 ----------
-What was proposed origially was called "SandS" - stands for "Space and
+What was proposed originally was called "SandS" - stands for "Space and
 Shift" - which dates back to year 2001, by K. Kimura.[1] There's
-implementations in Mac and Win.
+implementations in Mac and Win, and has a modest popularity in Japan
+still in year 2011.
 
 In 2008 T. Matsuyama implemented it for X keyboard driver.[2] Then
 came a port to evdev driver by "jeneshicc".[3] But they lack
@@ -272,6 +454,29 @@ code is based on the last patch.
 http://dev.ariel-networks.com/Members/matsuyama/keyboard-customize
 [3] (Japanese):
 http://d.hatena.ne.jp/jeneshicc/20100306/1267843799
+
+Source code
+===========
+
+Required knowledge
+------------------
+Required is only C knowledge, none of X. I've added some comments, so
+it must be easy to understand.
+
+src/evdev.h
+-----------
+Search for "ahm variables".
+
+src/evdev.c
+-----------
+* Parsing options
+  Ahm options are parsed in function NewEvdevPreInit. Search for
+  "parse ahm options".
+
+* Event handling
+  In the Xorg original code, keyboard events are handled by
+  EvdevQueueKbdEvent. Ahm wraps it with AhmStep1 and AhmStep2, and
+  WrapEvdevQueueKbdEvent.
 
 License
 =======

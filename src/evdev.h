@@ -33,6 +33,7 @@
 
 #include <linux/input.h>
 #include <linux/types.h>
+#include <sys/time.h>
 
 #include <xorg-server.h>
 #include <xf86Xinput.h>
@@ -79,7 +80,6 @@
 #ifndef MAX_VALUATORS
 #define MAX_VALUATORS 36
 #endif
-
 
 #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5
 typedef struct {
@@ -136,9 +136,23 @@ typedef struct {
     unsigned int abs_queued, rel_queued, prox_queued;
     unsigned int abs_prox;  /* valuators posted while out of prox? */
 
+    /* ahm variables */
     int                 lastScanCode;
-    unsigned int        * transModTable; /* [orig keycode] means translated keycode */
-    unsigned int        * transModCount; /* records how many times fold the translated key is pressed */
+    unsigned int        transModTable[KEY_MAX+1]; /* [orig keycode] means translated keycode */
+    int                 transModCount[KEY_MAX+1]; /* records how many times fold the translated key is pressed */
+    unsigned int        transModFreeze[KEY_MAX+1]; /* 1 means temporarily transmod is frozen. */
+
+    int                 ahmTimeout;
+    struct timeval      lastEventTime;
+
+    int                 ahmDelayTable[KEY_MAX+1];
+    int                 ahmDelayedCode[2];
+    struct timeval      ahmDelayedTime[2];
+    int                 ahmDelayedKeys;
+    int                 ahmResetTime;
+
+    int                 ahmFreezeTT;
+    /* end of ahm variables */
 
     /* XKB stuff has to be per-device rather than per-driver */
 #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5
@@ -203,7 +217,11 @@ typedef struct {
 } EvdevRec, *EvdevPtr;
 
 /* Event posting functions */
-void EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
+/*
+ * ahm changed the type. originally:
+ * void EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
+ */
+static int EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
 void EvdevQueueButtonEvent(InputInfoPtr pInfo, int button, int value);
 void EvdevQueueProximityEvent(InputInfoPtr pInfo, int value);
 void EvdevPostButtonEvent(InputInfoPtr pInfo, int button, int value);
