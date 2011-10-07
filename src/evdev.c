@@ -367,41 +367,37 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 {
   EvdevPtr pEvdev = pInfo->private;
 
-  int lastScanCode;
+  int lastPressCode;
 
   unsigned int * transModTable = pEvdev->transModTable;
   int * transModCount = pEvdev->transModCount;
 
-  lastScanCode = pEvdev->lastScanCode;
+  lastPressCode = pEvdev->lastPressCode;
 
   if(value == 1){
-    pEvdev->lastScanCode = code;
+    pEvdev->lastPressCode = code;
   }
 
   if((value == 0)
-     && transModTable[lastScanCode]
-     && (lastScanCode != code)
+     && transModTable[lastPressCode]
+     && (lastPressCode != code)
      && transModTable[code]
+     && (pEvdev->lastValue == 1)
      && pEvdev->ahmFreezeTT){
-    /*
-     * What happened: a transmod X press, another transmod Y press,
-     * then came X release.
-     * Currently it's implemented as: treat Y temporarily as orig,
-     * and replay.
-     */
-    transModCount[transModTable[lastScanCode]]--;
-    if(transModCount[transModTable[lastScanCode]] <= 0){
-      WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[lastScanCode]);
+    /* Implements AhmFreezeTT */
+    transModCount[transModTable[lastPressCode]]--;
+    if(transModCount[transModTable[lastPressCode]] <= 0){
+      WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[lastPressCode]);
     }
-    if(transModCount[transModTable[lastScanCode]] < 0){
+    if(transModCount[transModTable[lastPressCode]] < 0){
       /*
        * Usually this doesn't happen, but not never, either.
        * Thus in fact this line is necessary.
        */
-      transModCount[transModTable[lastScanCode]] = 0;
+      transModCount[transModTable[lastPressCode]] = 0;
     }
-    WrapEvdevQueueKbdEvent(pInfo, ev, 1, lastScanCode);
-    pEvdev->transModFreeze[lastScanCode] = 1;
+    WrapEvdevQueueKbdEvent(pInfo, ev, 1, lastPressCode);
+    pEvdev->transModFreeze[lastPressCode] = 1;
 
     /* Treat the latest code as usual in the following. */
   }
@@ -416,6 +412,7 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
       pEvdev->transModFreeze[code] = 0;
     }else{
       /* Transmod, not frozen */
+
       if(value == 1){
 	/* press */
 
@@ -427,9 +424,6 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 	 */
 	transModCount[transModTable[code]]++;
 	WrapEvdevQueueKbdEvent(pInfo, ev, 1, transModTable[code]);
-
-	pEvdev->lastEventTime.tv_sec  = ev->time.tv_sec;
-	pEvdev->lastEventTime.tv_usec = ev->time.tv_usec;
       }else{
 	/* release */
 	transModCount[transModTable[code]]--;
@@ -444,7 +438,7 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 	  transModCount[transModTable[code]] = 0;
 	}
 
-	if((lastScanCode == code)
+	if((lastPressCode == code)
 	   && (ahmTimedOutP(pEvdev->lastEventTime.tv_sec,
 			    pEvdev->lastEventTime.tv_usec,
 			    ev, pEvdev->ahmTimeout) == 0)
@@ -478,9 +472,12 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 
     }
   }
+  pEvdev->lastEventTime.tv_sec  = ev->time.tv_sec;
+  pEvdev->lastEventTime.tv_usec = ev->time.tv_usec;
+  pEvdev->lastValue = value;
 }
 
-/* Handle ahmDelay before AhmStep2 */
+/* Handles reset and ahmDelay before AhmStep2 */
 static void
 AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
   /*
@@ -509,6 +506,7 @@ AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
     return;
   }
 
+  /* Reset part */
   if (pEvdev->ahmResetTime &&
       (ev->time.tv_sec - pEvdev->lastEventTime.tv_sec >
        pEvdev->ahmResetTime)){
@@ -532,6 +530,8 @@ AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
       pEvdev->transModFreeze[c] = 0;
     }
   }
+
+  /* Delay part. */
 
   /* How many keys are already delayed? */
   switch(pEvdev->ahmDelayedKeys){
@@ -2547,7 +2547,8 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 	char *end = NULL;
 	int fromCode = 0, toCode = 0;
 
-	pEvdev->lastScanCode = 0;
+	pEvdev->lastPressCode = 0;
+	pEvdev->lastValue = 0;
 
 	for(fromCode = 0; fromCode < KEY_MAX; fromCode++){
 	  pEvdev->transModCount[fromCode] = 0;
@@ -2560,18 +2561,17 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 	pEvdev->ahmTimeout = xf86SetIntOption(pInfo->options, "AhmTimeout", 600);
 	pEvdev->lastEventTime.tv_sec = 0;
 	pEvdev->lastEventTime.tv_usec = 0;
-	xf86Msg(X_CONFIG, "%s: timeout: %i\n",
-		pInfo->name, pEvdev->ahmTimeout);
 
 	pEvdev->ahmDelayedKeys = 0;
 
-	pEvdev->ahmFreezeTT = xf86SetBoolOption(pInfo->options, "AhmFreezeTT", 0);
+	pEvdev->ahmFreezeTT = xf86SetBoolOption(pInfo->options, "AhmFreezeTT", 1);
 
 	pEvdev->ahmResetTime = xf86SetIntOption(pInfo->options, "AhmResetTime", 10);
 
 	/* parse "transMod" option */
 	str = xf86CheckStrOption(pInfo->options, "TransMod",NULL);
 	if(str){
+	  xf86Msg(X_CONFIG, "Option \"TransMod\" \"%s\"\n", str);
 	  toFree = str;
 	  next = str;
 	  while(next != NULL){
@@ -2618,6 +2618,7 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 	/* parse option "AhmDelay" */
 	str = xf86CheckStrOption(pInfo->options, "AhmDelay", NULL);
 	if(str){
+	  xf86Msg(X_CONFIG, "Option \"AhmDelay\" \"%s\"\n", str);
 	  toFree = str;
 	  next = str;
 	  while(next != NULL){

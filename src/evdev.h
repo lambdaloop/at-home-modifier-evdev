@@ -137,7 +137,8 @@ typedef struct {
     unsigned int abs_prox;  /* valuators posted while out of prox? */
 
     /* ahm variables */
-    int                 lastScanCode;
+    int                 lastPressCode;
+    int                 lastValue;
     unsigned int        transModTable[KEY_MAX+1]; /* [orig keycode] means translated keycode */
     int                 transModCount[KEY_MAX+1]; /* records how many times fold the translated key is pressed */
     unsigned int        transModFreeze[KEY_MAX+1]; /* 1 means temporarily transmod is frozen. */

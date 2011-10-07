@@ -1,6 +1,8 @@
 Welcome to "At Home Modifier" hack of xf86-input-evdev. The original
 README is moved to README.orig.
 
+Search for the word "News" for the news.
+
 Contents
 ========
 * What it is
@@ -44,7 +46,7 @@ Get it
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.1.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.2.tar.gz
 
 You can also download the patch against the xf86-input-evdev from the
 website.
@@ -93,9 +95,12 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     Option "AutoServerLayout" "on"
 
     MatchIsKeyboard "on"
-    # Perhaps you want something like one of them:
-    MatchProduct "AT Translated Set 2 keyboard"
-    # MatchUSBID "0566:3029"
+    # If you have multiple keyboards, you want something like one of them:
+    #  MatchProduct "AT Translated Set 2 keyboard"
+    #  MatchUSBID "0566:3029"
+    # Name is found in Xorg log, following the message "Adding input device"
+    # or by
+    # $ cat /proc/bus/input/devices
 
     ### at-home-modifier options begin here.
     # The basic option.
@@ -121,12 +126,19 @@ Don't forget to restart X!
 
 The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
 right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
-have many keys you can press with thumbs.)
+have many keys you can press with thumbs.) For that radical change,
+you need "setxkbmap" command or tampering files in
+/usr/share/X11/xkb/symbols.
+
+Options recognized by at-home-modifier (in fact, by any X drivers)
+are printed to X log, typically /var/log/Xorg.0.log, like this:
+
+  [    50.579] (**) Option "AhmTimeout" "400"
 
 *** Big keycode support ***
 
 If some keys of your keyboard are not supported by X, then this hack
-can be used as a workaround. I don't have such device, thus can't
+can be used as a workaround. I don't have such a device, thus can't
 guarantee, though.
 
 Some keys are assigned keycodes > 255, and linux input driver *does*
@@ -135,9 +147,9 @@ and unused = empty keycodes in X, let them get translated. For this
 use, you can safely forget if the involved keys are modifiers or not.
 It doesn't matter.
 
-Linux keycodes can be checked with "showkey" command. Notice that X
-keycodes have +8 offset from linux ones, e.g. ESC is 1 in linux, and 9
-in X. At-home-modifer accepts X keycodes.
+Linux keycodes can be checked with "showkey" command. Notice that
+linux keycodes have -8 offset from X ones, e.g. ESC is 1 in linux, and
+9 in X. At-home-modifer expects X keycodes.
 
 Fine tuning options
 -------------------
@@ -148,10 +160,9 @@ try.
 
 Users of this hack often have "tongue-twister of finger": Suppose you
 want " x". You first press space/shift, but if you press x and release
-space/shift, you'll get X instead.
+space/shift, you'll get an upper-case X instead.
 
-To fix it, you can let the driver "delay" the press of space/shift,
-like:
+To fix it, you can let "delay" be associated to space/shift, like:
 
     Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
 
@@ -159,7 +170,7 @@ Then the press of x (or any) following space/shift is "delayed",
 and completes after release of space/shift or x.
 
 There's a trade off. Whenever you want a real shift, you have to
-make sure to release the space/shift afterward.
+release the space/shift later.
 
 Notice that *original* keycodes are used in the X configuration file,
 so in this example, 65 = space, not 50 = left shift.
@@ -185,10 +196,12 @@ Linux forum. Thanks.
 
 *** Successive transmod tuning ***
 
-If the boolean option "AhmFreezeTT" is true, then in a sequence of
-"transmod X press, transmod Y press, X release", press of Y is treated
-as the original key, not as the modifier. ("TT" is meant for
-"transmod-transmod".) The default is false.
+A subtle fix is enabled by default; suppose a transmod X has been
+pressed. If "transmod Y press, X release" follows, then the press of Y
+is treated as the original key. It's probably what you want.
+
+You can disable it by setting the boolean option "AhmFreezeTT" to false.
+("TT" is meant for "transmod-transmod".)
 
 See also "Corner cases in press and release order" below.
 
@@ -202,10 +215,10 @@ You can change this time with the following option:
 To disable this feature, set it to 0.
 
 Reset is implemented by sending release events to all translated
-modifiers, and clearing internal variables. The exact time the rest
-is done is the first time you touch the keyboard. The time measurement
-is not exact, by ignoring sub-second values. Thus the maximal error is
-1 sec.
+modifiers, and clearing internal variables. The time measurement is
+not exact, and the maximal error is 1 sec. (It's because the
+sub-second field of timeval struct is ignored.) The exact time the
+rest is done is the first time you touch the keyboard.
 
 More on keycodes
 ----------------
@@ -272,7 +285,7 @@ Fixed bugs
   release b.  Then it should be 'B', but it used to emit lower b. It's
   because the release of shift was sent before b key press.
 
-* In 2.6.1
+* In 2.6.2
   ** Release interference bug
   Suppose you press x, space/shift, release x, release
   space/shift. Probably you wanted "x ". But formerly, only "x" is
@@ -296,8 +309,6 @@ Known bugs
 * Switching VT: When you switch back to X from virtual console with
   (Ctrl +) Alt + Fxx, ctrl get frozen. This is mitigated with "reset"
   feature.
-* Random chattering: Sometimes chattering happens. I don't know
-  when.
 
 Not a bug
 ---------
@@ -311,8 +322,8 @@ for this hack, but they may be expensive. (USB connection can't report
 7 or more simultaneous presses, but it doesn't matter for us.)
 
 *** Limitations ***
-Each device is unaware of others. If you press your translated shift
-with a left click, it works as shift, but the original key event is
+Each device is unaware of others. If you press space/shift and the
+left click, it works as shift + click, but a space key event is
 generated after it too, unless the shift is timed out.
 
 This is a mere hack. The correct way will be to implement this in
@@ -323,13 +334,17 @@ Wishes
 ------
 "Dynamic configuration", or config changes on-the-fly may be good,
 for example enabling some keys only when you're using an input method.
-I don't know anything about socket or inter process communication,
+I don't know anything about socket or inter-process communication,
 so please tell me how to do it.
+
+Autorepeat support. For example, you press space/shift twice in a row,
+and hold it long enough, then it's turned to the press of space, rather
+than shift. It seems "alarm" function in glibc enables this, but I
+don't understand the manual.
 
 Bug reporting
 -------------
-When you report a bug, please be precise. Don't forget to disable
-autorepeat by
+When you report a bug, don't forget to disable autorepeat by
   $ xset -r
 
 It's better to make AhmResetTime big, and if you enable AhmDelay,
@@ -361,7 +376,7 @@ Random bits
 Will this patch speed up typing?
 --------------------------------
 In my case, it didn't. But I (or my hands) feel far better and I can't
-do without this patch any more. It's much less tiring, so it may be
+do without this fork any more. It's much less tiring, so it may be
 more efficient if you use keyboard for long time in a day.
 
 In fact, this hack introduces some nicety. Options like delay and
@@ -395,11 +410,6 @@ HHK Professional come with n-key rollover.
 FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
 touch, but I like the layout.
 
-Format of this file
--------------------
-This file is *not* formatted in markdown, which is not so much
-readable until conversion to HTML.
-
 Alternatives
 ============
 There're some alternative candidates of at-home-modifier.
@@ -419,7 +429,7 @@ History
 
 News
 ----
-* 2.6.1 (oct 2011):
+* 2.6.2 (oct 2011):
   * New features
     Long press cancellation (Option "AhmTimeout"), fast type fix
     (Option "AhmDelay"), successive transmod tuning (Option
@@ -431,8 +441,9 @@ News
   * Documentation
     New sections: "Not a bug", "Corner cases", "Alternatives", "Source
     code".
-    New bug items: "Switching VT" and "Random chattering".
-    New wish item: "Dynamic configuration".
+    New bug items: "Switching VT".
+    New wish item: "Dynamic configuration", "autorepeat support"
+* 2.6.1 was never released.
 * 2.6.0 (apr 2011): Merged upstream 2.6.0. "Double shift bug" is fixed.
 * 2.5.1 (feb 2011): Minor documentation updates.
 * 2.5.0 (feb 2011): Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
