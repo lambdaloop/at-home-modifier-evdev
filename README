@@ -78,6 +78,8 @@ Install
 Other Linux users can install it by replacing xf86-input-evdev.
 I'd appreciate it a lot if you could send me your distro support.
 
+Compilation can be done just the same way as the original.
+
 Usage
 =====
 First, know the keycodes you need, which are numbers assigned to each
@@ -127,8 +129,8 @@ Don't forget to restart X!
 The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
 right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
 have many keys you can press with thumbs.) For that radical change,
-you need "setxkbmap" command or tampering files in
-/usr/share/X11/xkb/symbols.
+you need "xmodmap" command, or for more complicated changes, tamper
+with files in /usr/share/X11/xkb/symbols
 
 Options recognized by at-home-modifier (in fact, by any X drivers)
 are printed to X log, typically /var/log/Xorg.0.log, like this:
