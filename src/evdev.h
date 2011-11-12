@@ -91,6 +91,12 @@ typedef struct {
 } XkbRMLVOSet;
 #endif
 
+#define AHM_QUEUE_SIZE 256
+
+/* If we're not using GNU C, nuke __attribute__ */
+#ifndef __GNUC__
+#  define  __attribute__(x)  /*NOTHING*/
+#endif
 
 #define LONG_BITS (sizeof(long) * 8)
 
@@ -136,24 +142,32 @@ typedef struct {
     unsigned int abs_queued, rel_queued, prox_queued;
     unsigned int abs_prox;  /* valuators posted while out of prox? */
 
-    /* ahm variables */
-    int                 lastPressCode;
-    int                 lastValue;
-    unsigned int        transModTable[KEY_MAX+1]; /* [orig keycode] means translated keycode */
-    int                 transModCount[KEY_MAX+1]; /* records how many times fold the translated key is pressed */
-    unsigned int        transModFreeze[KEY_MAX+1]; /* 1 means temporarily transmod is frozen. */
+  /* ahm variables */
+  int                 lastPressCode;
+  int                 lastValue;
+  unsigned int        transModTable[256]; /* [orig keycode] means translated keycode */
+  int                 transModCount[256]; /* records how many times fold the translated key is pressed */
+  unsigned int        transModFreeze[256]; /* 1 means temporarily transmod is frozen. */
 
-    int                 ahmTimeout;
-    struct timeval      lastEventTime;
+  int                 ahmTimeout;
+  struct timeval      lastEventTime;
 
-    int                 ahmDelayTable[KEY_MAX+1];
-    int                 ahmDelayedCode[2];
-    struct timeval      ahmDelayedTime[2];
-    int                 ahmDelayedKeys;
-    int                 ahmResetTime;
+  int                 ahmDelayTable[256];
+  int                 ahmDelayedCode[2];
+  int                 ahmDelayedKeys;
+  int                 ahmResetTime;
 
-    int                 ahmFreezeTT;
-    /* end of ahm variables */
+  int                 ahmFreezeTT;
+
+  /* queuing variables */
+  int                 ahmPaddingInterval;
+  Time                ahmTimerExpires;
+  int                 ahmQueueKeys[AHM_QUEUE_SIZE];
+  int                 ahmQueueValues[AHM_QUEUE_SIZE];
+  int                 ahmQueueTop; /* Dispatch from here */
+  int                 ahmQueueBottom; /* Queue from here */
+
+  /* end of ahm variables */
 
     /* XKB stuff has to be per-device rather than per-driver */
 #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5

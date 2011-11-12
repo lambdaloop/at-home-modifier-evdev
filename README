@@ -114,6 +114,7 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     # Option "AhmDelay" "65 102" # Delayed keys.
     # Option "AhmFreezeTT" "true"
     # Option "AhmResetTime" "10" # In sec.
+    # Option "AhmPaddingInterval" "10" # In millisecond.
   EndSection
 
 Of course, you can use any keys. "d" & "k" (and so on) may be good.
@@ -137,22 +138,6 @@ are printed to X log, typically /var/log/Xorg.0.log, like this:
 
   [    50.579] (**) Option "AhmTimeout" "400"
 
-*** Big keycode support ***
-
-If some keys of your keyboard are not supported by X, then this hack
-can be used as a workaround. I don't have such a device, thus can't
-guarantee, though.
-
-Some keys are assigned keycodes > 255, and linux input driver *does*
-support them. But X can only accept 255 keys. If you have such keys
-and unused = empty keycodes in X, let them get translated. For this
-use, you can safely forget if the involved keys are modifiers or not.
-It doesn't matter.
-
-Linux keycodes can be checked with "showkey" command. Notice that
-linux keycodes have -8 offset from X ones, e.g. ESC is 1 in linux, and
-9 in X. At-home-modifer expects X keycodes.
-
 Fine tuning options
 -------------------
 For the first time, skip this section. Come back after you actually
@@ -161,9 +146,10 @@ try.
 *** Fast type fix (delay) ***
 
 Users of this hack often have "tongue-twister of finger": Suppose you
-want " x". You first press space/shift, but if you press x and release
-space/shift, you'll get an upper-case X instead.
-
+want " x". If the first press of space/shift is followed first by a
+press of x and then a release of space/shift, you'll get an upper-case X
+instead.
+ 
 To fix it, you can let "delay" be associated to space/shift, like:
 
     Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
@@ -221,6 +207,26 @@ modifiers, and clearing internal variables. The time measurement is
 not exact, and the maximal error is 1 sec. (It's because the
 sub-second field of timeval struct is ignored.) The exact time the
 rest is done is the first time you touch the keyboard.
+
+*** Gtk widget double-press workaround (padding interval) ***
+
+Suppose you focus a gtk window with a button widget. When you press
+the shift/space, the button should be pressed. But with this hack,
+you may have to press the key twice; the first press merely focuses
+the button, and the second key press becomes the real push.
+
+As a workaround, "padding interval" can be set:
+    Option "AhmPaddingInterval" "10" # In millisecond.
+The default value is 10 ms, and I think it's good, but if it doesn't
+work, set it bigger.
+
+How it works: remember that a press and release of shift/space key
+sends a press of shift, its release, a press of space, and its
+release. Padding interval is inserted between the shift release and
+the space press. Bigger the value, likelier to work, but the latency
+gets bigger, too.
+
+I don't know what's happening in gtk, but this solves.
 
 More on keycodes
 ----------------
@@ -288,15 +294,11 @@ Fixed bugs
   because the release of shift was sent before b key press.
 
 * In 2.6.2
-  ** Release interference bug
+  ** Key release interference bug
   Suppose you press x, space/shift, release x, release
   space/shift. Probably you wanted "x ". But formerly, only "x" is
   sent. (More precisely, "x" + shift are sent. Don't confuse it with
   "AhmDelay".)
-
-  ** keycode limit
-  X's keycode limit is 255, but linux input driver's keycode limit is
-  0x2ff. Now it accepts input codes > 255.
 
   ** Frozen key bug
   Probably ahm-2.6.0 has introduced a new bug which makes some keys
@@ -305,6 +307,24 @@ Fixed bugs
 
   ** Memory leak
   Previous version had slight memory leaks (almost unnoticeable).
+
+  ** (obsolete) keycode limit
+  __This feature is deleted in 2.6.3__
+  X's keycode limit is 255, but linux input driver's keycode limit is
+  0x2ff. Now it accepts input codes > 255.
+
+* In 2.6.3
+  ** Gtk widget double press issue.
+  To push a gtk button, sometimes you had to press space/shift key
+  twice, but this is fixed. If it doesn't work out-of-box, set
+  "AhmPaddingInterval" option.
+  (This "bug" is not the author's fault, but what's bad for users
+  are bugs.=)
+
+  ** Reset and Delayed key
+  "Delay" and "Reset" are features introduced in 2.6.2. If a delayed
+  key is pressed after a long enough period is passed (i.e. a reset is
+  done), the press was ignored. It's fixed now.
 
 Known bugs
 ---------
@@ -416,39 +436,51 @@ Alternatives
 ============
 There're some alternative candidates of at-home-modifier.
 
-* actkbd: It works by meddling with kernel input, but not updated
+* actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
-  http://users.softlab.ntua.gr/~thkala/projects/actkbd/
+
+    http://users.softlab.ntua.gr/~thkala/projects/actkbd/
+
 * 窓使いの憂鬱 (Mado-tsukai no yū-utsu; meaning "Spleen of Windows
-  Users") for Linux & Darwin: It's an attempt to port a Windows
-  software to tune keyboards. I've heard that the Windows version
-  enables "SandS" ("space and shift"), but don't know the linux
-  version. Japanese documentation only. Not maintained actively.
-  http://www42.tok2.com/home/negidakude/
+  Users") for Linux & Darwin: It's a port of a Windows key tuner
+  software "窓使いの憂鬱", comparable to AutoHotkey. Japanese
+  documentation only. The author is not reachable. Not maintained
+  actively. It uses uinput.
+
+    http://www42.tok2.com/home/negidakude/
 
 History
 =======
 
 News
 ----
+* 2.6.3 (nov 2011):
+  * Bugs fixed
+    Gtk button double press bug. Reset and delayed key bug.
+  * Big keycode support is deleted.
+    In 2.6.2, big keycode support was introduced, but it's
+    deleted. loadkeys (1) command suffices.
 * 2.6.2 (oct 2011):
   * New features
     Long press cancellation (Option "AhmTimeout"), fast type fix
     (Option "AhmDelay"), successive transmod tuning (Option
-    "AhmFreezeTT"), reset (Option "AhmResetTime") are implemented. Big
-    keycode support.
+    "AhmFreezeTT"), reset (Option "AhmResetTime") are implemented.
   * Bugs fixed
     Release interference bug, keycode limit bug, and 2 other minor
     bugs are fixed.
   * Documentation
     New sections: "Not a bug", "Corner cases", "Alternatives", "Source
     code".
-    New bug items: "Switching VT".
-    New wish item: "Dynamic configuration", "autorepeat support"
+    New bug item: "Switching VT".
+    New wish items: "Dynamic configuration", "autorepeat support"
+  * Feature deleted in later release.
+    "Big keycode support" is introduced in 2.6.2, but deleted in 2.6.3.
 * 2.6.1 was never released.
 * 2.6.0 (apr 2011): Merged upstream 2.6.0. "Double shift bug" is fixed.
 * 2.5.1 (feb 2011): Minor documentation updates.
 * 2.5.0 (feb 2011): Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
+
+Versions 2.X.y are based on the upstream 2.X.0, unless noted explicitly.
 
 Background
 ----------
@@ -480,16 +512,27 @@ src/evdev.h
 -----------
 Search for "ahm variables".
 
+In src/evdev.c, gcc __attribute__ is used. To support other compilers,
+it's defined to null when __GNUC__ is not defined.
+
 src/evdev.c
 -----------
 * Parsing options
   Ahm options are parsed in function NewEvdevPreInit. Search for
   "parse ahm options".
 
-* Event handling
+* Earlier event handling
   In the Xorg original code, keyboard events are handled by
   EvdevQueueKbdEvent. Ahm wraps it with AhmStep1 and AhmStep2, and
   WrapEvdevQueueKbdEvent.
+
+* Later event handling
+  In the original code, events get really sent in
+  EvdevPostQueuedEvents. To implement AhmPaddingInterval, this
+  function is changed a bit, by queuing key events in ahm's own queue,
+  and asynchronous timer is set. Timer related functions I've added
+  are: AhmWakeupHandler, AhmBlockHandler, AhmRegisterTimers and
+  AhmFinalise.
 
 License
 =======
