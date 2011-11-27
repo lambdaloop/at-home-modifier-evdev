@@ -40,16 +40,22 @@ http://gitorious.org/at-home-modifier/pages/Home
 Forum / mailing list is found at:
 http://at-home-modifier.2300353.n4.nabble.com/
 
+Distro forum threads:
+* Gentoo: http://forums.gentoo.org/viewtopic-t-865313.html
+* Arch: https://bbs.archlinux.org/viewtopic.php?pid=938140
+* Ubuntu: http://ubuntuforums.org/showthread.php?p=10907505
+* Debian: http://forums.debian.net/viewtopic.php?f=20&t=65950
+
 Get it
 ======
 
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.2.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.3.tar.gz
 
-You can also download the patch against the xf86-input-evdev from the
-website.
+You can also download the patch against the Xorg's original
+xf86-input-evdev from the website.
 
 git
 ---
@@ -71,6 +77,8 @@ You can see the difference to the original code by:
 
 Install
 -------
+See also the distro forum threads listed above.
+
 * Gentoo Linux users can use ebuild files. Get one from the web site.
 * Arch Linux AUR repository entry is:
   https://aur.archlinux.org/packages.php?ID=49546
@@ -117,21 +125,15 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     # Option "AhmPaddingInterval" "10" # In millisecond.
   EndSection
 
-Of course, you can use any keys. "d" & "k" (and so on) may be good.
-(When you want to capitalize the left-hand keys, press "k", and "d"
-for right-hands. This may sound too complex, but you'll be soon
-accustomed.) If you want to specify multiple pairs, separate them
-with whitespaces, like this:
+Note: disable autorepeat for the shift (or any modifier) key, as
+  $ xset -r 50
+
+If you want to specify multiple pairs, separate them with whitespaces,
+like this:
 
   Option "TransMod" "65:240 102:241 100:241"
 
 Don't forget to restart X!
-
-The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
-right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
-have many keys you can press with thumbs.) For that radical change,
-you need "xmodmap" command, or for more complicated changes, tamper
-with files in /usr/share/X11/xkb/symbols
 
 Options recognized by at-home-modifier (in fact, by any X drivers)
 are printed to X log, typically /var/log/Xorg.0.log, like this:
@@ -142,6 +144,19 @@ Fine tuning options
 -------------------
 For the first time, skip this section. Come back after you actually
 try.
+
+*** Other keys ***
+
+The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
+right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
+have many keys you can press with thumbs.) For that radical change,
+you need "xmodmap" command, or for more complicated changes, tamper
+with files in /usr/share/X11/xkb/symbols
+
+You can use any keys for transmods. "d" & "k" (and so on) may be good.
+When you want to capitalize the left-hand keys, press "k", and "d"
+for right-hands. This may sound too complex, but you'll be soon
+accustomed.
 
 *** Fast type fix (delay) ***
 
@@ -361,8 +376,7 @@ so please tell me how to do it.
 
 Autorepeat support. For example, you press space/shift twice in a row,
 and hold it long enough, then it's turned to the press of space, rather
-than shift. It seems "alarm" function in glibc enables this, but I
-don't understand the manual.
+than shift.
 
 Bug reporting
 -------------
