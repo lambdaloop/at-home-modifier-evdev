@@ -21,7 +21,8 @@ What it is
 It enables for example "shift/space dual role key." When you press the
 space key alone, it's a space; but when you press it with another key,
 it's a shift. Any pairs of keys are possible. It is a fork of evdev
-driver = xf86-input-evdev.
+driver = xf86-input-evdev. It's ** only for Linux ** - X in other
+platforms don't use evdev driver.
 
 With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
@@ -445,7 +446,8 @@ See also "not a bug" section above. Kinesis contoured, Realforce and
 HHK Professional come with n-key rollover.
 
 FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
-touch, but I like the layout.
+touch, but I like the layout. You can buy it from Amazon Japan.
+(I don't like Amazon hegemony, but they provide English interface.)
 
 Alternatives
 ============
