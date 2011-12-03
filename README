@@ -127,9 +127,6 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     # Option "AhmPaddingInterval" "10" # In millisecond.
   EndSection
 
-Note: disable autorepeat for the shift (or any modifier) key, as
-  $ xset -r 50
-
 If you want to specify multiple pairs, separate them with whitespaces,
 like this:
 
@@ -212,8 +209,9 @@ See also "Corner cases in press and release order" below.
 
 *** Reset ***
 
-Sometimes transmods get frozen, so the workaround is provided; just
-leave the keyboard long enough time (default 10 secs) untouched.
+Sometimes transmods get frozen (See "Switching VT" section below), so
+a workaround is provided; just leave the keyboard long enough time
+(default 10 secs) untouched.
 
 You can change this time with the following option:
     Option "AhmResetTime" "10" # In sec.
@@ -345,9 +343,12 @@ Fixed bugs
 
 Known bugs
 ---------
-* Switching VT: When you switch back to X from virtual console with
-  (Ctrl +) Alt + Fxx, ctrl get frozen. This is mitigated with "reset"
-  feature.
+* Switching VT: If your Ctrl is a transmod key, when you switch from X
+  to virtual console with Ctrl + Alt + F1, and switch back to X wi Alt
+  + F1, Ctrl get frozen. This is mitigated with "reset" feature.
+
+  It happens because Ctrl is pressed at the first switching, but the
+  release is only sent to a VT, not to X, in particular this hack.
 
 Not a bug
 ---------
