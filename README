@@ -221,7 +221,7 @@ Reset is implemented by sending release events to all translated
 modifiers, and clearing internal variables. The time measurement is
 not exact, and the maximal error is 1 sec. (It's because the
 sub-second field of timeval struct is ignored.) The exact time the
-rest is done is the first time you touch the keyboard.
+reset is done is the first time you touch the keyboard.
 
 *** Gtk widget double-press workaround (padding interval) ***
 
@@ -344,11 +344,11 @@ Fixed bugs
 Known bugs
 ---------
 * Switching VT: If your Ctrl is a transmod key, when you switch from X
-  to virtual console with Ctrl + Alt + F1, and switch back to X wi Alt
-  + F1, Ctrl get frozen. This is mitigated with "reset" feature.
+  to a virtual console with Ctrl + Alt + F1, and switch back to X with
+  Alt + F1, Ctrl get frozen. This is mitigated with "reset" feature.
 
   It happens because Ctrl is pressed at the first switching, but the
-  release is only sent to a VT, not to X, in particular this hack.
+  release is only sent to the VT, not to X, in particular to this driver.
 
 Not a bug
 ---------
