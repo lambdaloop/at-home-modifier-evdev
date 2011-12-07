@@ -79,8 +79,7 @@ You can see the difference to the original code by:
 Install
 -------
 * Gentoo Linux users can use ebuild files. Visit the Gentoo Forum thread.
-* Arch Linux AUR repository entry is:
-  https://aur.archlinux.org/packages.php?ID=49546
+* Arch Linux AUR  entries are there. Visit the Arch Forum thread.
 * Debian and its derivatives: Visit the Debian Forum thread.
 
 Forum threads are listed above.
@@ -448,7 +447,8 @@ HHK Professional come with n-key rollover.
 
 FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
 touch, but I like the layout. You can buy it from Amazon Japan.
-(I don't like Amazon hegemony, but they provide English interface.)
+(I don't like Amazon hegemony, but they provide English interface.
+Many Japanese keyboards are sold at amazon.com, too.)
 
 Alternatives
 ============
@@ -505,12 +505,13 @@ Background
 What was proposed originally was called "SandS" - stands for "Space and
 Shift" - which dates back to year 2001, by K. Kimura.[1] There's
 implementations in Mac and Win, and has a modest popularity in Japan
-still in year 2011.
+still in year 2011. (K. Kimura has also contributed a lot to Japanese
+input methods.)
 
 In 2008 T. Matsuyama implemented it for X keyboard driver.[2] Then
 came a port to evdev driver by "jeneshicc".[3] But they lack
 generality; you can only use physical shift, alt, and space keys. My
-code is based on the last patch.
+code is based on the last patch. I appreciate their work.
 
 [1] (Japanese) http://hp.vector.co.jp/authors/VA002116/
 [2] (Japanese)
