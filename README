@@ -89,6 +89,10 @@ I'd appreciate it a lot if you could send me your distro support.
 
 Compilation can be done just the same way as the original.
 
+** Server upgrading note **
+When you upgrade your xorg-server-x.y.z, be sure to rebuild this
+driver, too. (Change in z doesn't affect, but x or y does.)
+
 Usage
 =====
 First, know the keycodes you need, which are numbers assigned to each
@@ -119,6 +123,7 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
 
     ## Fine tuning options. Explained in a later section.
     # For the first time, omit them.
+
     # Option "AhmTimeout" "400" # In millisecond.
     # Option "AhmDelay" "65 102" # Delayed keys.
     # Option "AhmFreezeTT" "true"
@@ -162,7 +167,7 @@ Users of this hack often have "tongue-twister of finger": Suppose you
 want " x". If the first press of space/shift is followed first by a
 press of x and then a release of space/shift, you'll get an upper-case X
 instead.
- 
+
 To fix it, you can let "delay" be associated to space/shift, like:
 
     Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
