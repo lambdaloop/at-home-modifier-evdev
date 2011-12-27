@@ -53,7 +53,7 @@ Get it
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.3.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.4.tar.gz
 
 You can also download the patch against the Xorg's original
 xf86-input-evdev from the website.
@@ -131,8 +131,8 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     # Option "AhmPaddingInterval" "10" # In millisecond.
   EndSection
 
-If you want to specify multiple pairs, separate them with whitespaces,
-like this:
+If you want to specify multiple pairs for TransMod, separate them with
+whitespaces, like this:
 
   Option "TransMod" "65:240 102:241 100:241"
 
@@ -366,13 +366,14 @@ for this hack, but they may be expensive. (USB connection can't report
 7 or more simultaneous presses, but it doesn't matter for us.)
 
 *** Limitations ***
-Each device is unaware of others. If you press space/shift and the
-left click, it works as shift + click, but a space key event is
-generated after it too, unless the shift is timed out.
+This driver is unaware of others, for example of synaptic driver.
+Suppose you press space/shift and the left click of notebook touchpad.
+It'll work as shift + click, but a space key event follows. (Timeout
+can give a workaround.)
 
 This is a mere hack. The correct way will be to implement this in
-"XKB2", which is not yet put into Xorg. If you want this to be
-merged in Xorg, please help X input driver developers.
+"XKB2", which is not yet (will never be??) put into Xorg. If you want
+this to be merged in Xorg, please help X input driver developers.
 
 Wishes
 ------
@@ -477,6 +478,16 @@ History
 
 News
 ----
+* 2.6.4 (dec 2011):
+  * Other device awareness
+    When you press space/shift and a mouse button, the result used to be
+    shift + click, followed by an extra, unwanted space. It's because
+    each device ignored others. Now it's fixed, as long as the mouse
+    is also handled by evdev driver. (Notebook touchpads are dealt
+    by synaptics driver, so it's not fixed, and won't be fixed.
+    Use AhmTimeout option as a workaround.)
+
+    Thanks to the ArchLinux forum user "grimp3ur" for the idea.
 * 2.6.3 (nov 2011):
   * Bugs fixed
     Gtk button double press bug. Reset and delayed key bug.
@@ -488,6 +499,9 @@ News
     Long press cancellation (Option "AhmTimeout"), fast type fix
     (Option "AhmDelay"), successive transmod tuning (Option
     "AhmFreezeTT"), reset (Option "AhmResetTime") are implemented.
+
+    Thanks to the ArchLinux forum user "bloom" for the idea of
+    long press cancellation.
   * Bugs fixed
     Release interference bug, keycode limit bug, and 2 other minor
     bugs are fixed.

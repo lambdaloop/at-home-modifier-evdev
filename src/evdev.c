@@ -127,6 +127,8 @@ static Atom prop_axis_label = 0;
 static Atom prop_btn_label = 0;
 #endif
 
+static InputInfoPtr ahmLastEventDevice;
+
 /* All devices the evdev driver has allocated and knows about.
  * MAXDEVICES is safe as null-terminated array, as two devices (VCP and VCK)
  * cannot be used by evdev, leaving us with a space of 2 at the end. */
@@ -439,6 +441,7 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 	}
 
 	if((lastPressCode == code)
+	   && (ahmLastEventDevice == pInfo)
 	   && (ahmTimedOutP(pEvdev->lastEventTime.tv_sec,
 			    pEvdev->lastEventTime.tv_usec,
 			    ev, pEvdev->ahmTimeout) == 0)
@@ -473,6 +476,7 @@ AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
     }
   }
   pEvdev->lastValue = value;
+  ahmLastEventDevice = pInfo;
 }
 
 /* Handles reset and ahmDelay before AhmStep2 */
@@ -666,6 +670,7 @@ EvdevQueueButtonEvent(InputInfoPtr pInfo, int button, int value)
         pQueue->key = button;
         pQueue->val = value;
     }
+    ahmLastEventDevice = pInfo;
 }
 
 void
