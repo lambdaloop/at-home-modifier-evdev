@@ -28,7 +28,7 @@ With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
 
 More precisely, you specify pairs of two keycodes, the "original", and
-the "translated". The last event gets recorded in this patch.  After
+the "translated". The last event gets recorded in this patch. After
 the press of one of "original" keys, the driver instead reports a
 translated key press event. When an original key is released, it sends
 a release of the translated key. And it sends a press and release of
@@ -42,7 +42,7 @@ Forum / mailing list is found at:
 http://at-home-modifier.2300353.n4.nabble.com/
 
 Distro forum threads:
-* Gentoo: http://forums.gentoo.org/viewtopic-t-865313.html
+* Gentoo: https://forums.gentoo.org/viewtopic-t-865313.html
 * Arch: https://bbs.archlinux.org/viewtopic.php?pid=938140
 * Ubuntu: http://ubuntuforums.org/showthread.php?p=10907505
 * Debian: http://forums.debian.net/viewtopic.php?f=20&t=65950
@@ -79,15 +79,14 @@ You can see the difference to the original code by:
 Install
 -------
 * Gentoo Linux users can use ebuild files. Visit the Gentoo Forum thread.
-* Arch Linux AUR  entries are there. Visit the Arch Forum thread.
+* Arch Linux AUR entries are there. Visit the Arch Forum thread.
 * Debian and its derivatives: Visit the Debian Forum thread.
 
 Forum threads are listed above.
 
 Other Linux users can install it by replacing xf86-input-evdev.
-I'd appreciate it a lot if you could send me your distro support.
-
-Compilation can be done just the same way as the original.
+Compilation can be done just the same way as the original. I'd
+appreciate it a lot if you could send me your distro support.
 
 ** Server upgrading note **
 When you upgrade your xorg-server-x.y.z, be sure to rebuild this
@@ -125,7 +124,7 @@ xorg.conf or xorg.conf.d/10-keyboard.conf:
     # For the first time, omit them.
 
     # Option "AhmTimeout" "400" # In millisecond.
-    # Option "AhmDelay" "65 102" # Delayed keys.
+    # Option "AhmDelay" "65 102" # Delayed keys. Seperate by spaces.
     # Option "AhmFreezeTT" "true"
     # Option "AhmResetTime" "10" # In sec.
     # Option "AhmPaddingInterval" "10" # In millisecond.
@@ -154,7 +153,8 @@ The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
 right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
 have many keys you can press with thumbs.) For that radical change,
 you need "xmodmap" command, or for more complicated changes, tamper
-with files in /usr/share/X11/xkb/symbols
+with files in /usr/share/X11/xkb/symbols/. See also the section "More
+con keycodes" below.
 
 You can use any keys for transmods. "d" & "k" (and so on) may be good.
 When you want to capitalize the left-hand keys, press "k", and "d"
@@ -163,7 +163,7 @@ accustomed.
 
 *** Fast type fix (delay) ***
 
-Users of this hack often have "tongue-twister of finger": Suppose you
+Users of this hack often have "tongue-twister of fingers": Suppose you
 want " x". If the first press of space/shift is followed first by a
 press of x and then a release of space/shift, you'll get an upper-case X
 instead.
@@ -178,8 +178,8 @@ and completes after release of space/shift or x.
 There's a trade off. Whenever you want a real shift, you have to
 release the space/shift later.
 
-Notice that *original* keycodes are used in the X configuration file,
-so in this example, 65 = space, not 50 = left shift.
+Notice that *original* keycodes are expected in the configuration file,
+so in this example, specify it as 65 = space, not 50 = left shift.
 
 *** Cancellation by long press (timeout) ***
 
@@ -197,9 +197,6 @@ then a single press and release of space/shift key produces nothing if
 the press lasts more than 0.4 sec. The default is 0.6 sec. You can disable
 timeout by setting it to 0.
 
-This feature was suggested by a user known as "bloom" in the Arch
-Linux forum. Thanks.
-
 *** Successive transmod tuning ***
 
 A subtle fix is enabled by default; suppose a transmod X has been
@@ -213,9 +210,9 @@ See also "Corner cases in press and release order" below.
 
 *** Reset ***
 
-Sometimes transmods get frozen (See "Switching VT" section below), so
-a workaround is provided; just leave the keyboard long enough time
-(default 10 secs) untouched.
+Sometimes translated modifiers get frozen (See "Switching VT" section
+below), so a workaround is provided; just leave the keyboard long
+enough time (default 10 secs) untouched.
 
 You can change this time with the following option:
     Option "AhmResetTime" "10" # In sec.
@@ -223,9 +220,9 @@ To disable this feature, set it to 0.
 
 Reset is implemented by sending release events to all translated
 modifiers, and clearing internal variables. The time measurement is
-not exact, and the maximal error is 1 sec. (It's because the
-sub-second field of timeval struct is ignored.) The exact time the
-reset is done is the first time you touch the keyboard.
+not exact, and the maximal error is 1 sec. (Implementation note: It's
+because the sub-second field of timeval struct is ignored.) The exact
+time the reset is done is the first time you touch the keyboard.
 
 *** Gtk widget double-press workaround (padding interval) ***
 
@@ -309,7 +306,7 @@ Fixed bugs
 * In 2.6.0
   ** Double shift bug
   Suppose both key a and b are translated to shift. Press a, b, and
-  release b.  Then it should be 'B', but it used to emit lower b. It's
+  release b. Then it should be 'B', but it used to emit lower b. It's
   because the release of shift was sent before b key press.
 
 * In 2.6.2
@@ -481,11 +478,12 @@ News
 * 2.6.4 (dec 2011):
   * Other device awareness
     When you press space/shift and a mouse button, the result used to be
-    shift + click, followed by an extra, unwanted space. It's because
-    each device ignored others. Now it's fixed, as long as the mouse
-    is also handled by evdev driver. (Notebook touchpads are dealt
-    by synaptics driver, so it's not fixed, and won't be fixed.
-    Use AhmTimeout option as a workaround.)
+    shift + click, ok, but also followed by an extra, unwanted
+    space, as if the click hadn't happened. It's because each device
+    ignored others. Now it's fixed, as long as the mouse is also
+    handled by evdev driver. (Notebook touchpads are dealt by
+    synaptics driver, so it's not fixed, and won't be fixed. Use
+    AhmTimeout option as a workaround.)
 
     Thanks to the ArchLinux forum user "grimp3ur" for the idea.
 * 2.6.3 (nov 2011):
