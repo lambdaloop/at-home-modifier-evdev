@@ -38,6 +38,7 @@
 
 #include <linux/version.h>
 #include <sys/stat.h>
+#include <libudev.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -48,23 +49,20 @@
 #include <xorgVersion.h>
 #include <xkbsrv.h>
 
-#ifdef HAVE_PROPERTIES
 #include <X11/Xatom.h>
 #include <evdev-properties.h>
 #include <xserver-properties.h>
-/* 1.6 has properties, but no labels */
-#ifdef AXIS_LABEL_PROP
-#define HAVE_LABELS
-#else
-#undef HAVE_LABELS
+
+#ifndef XI_PROP_PRODUCT_ID
+#define XI_PROP_PRODUCT_ID "Device Product ID"
 #endif
 
+#ifndef XI_PROP_VIRTUAL_DEVICE
+#define XI_PROP_VIRTUAL_DEVICE "Virtual Device"
 #endif
 
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 12
 /* removed from server, purge when dropping support for server 1.10 */
 #define XI86_SEND_DRAG_EVENTS   0x08
-#endif
 
 #ifndef MAXDEVICES
 #include <inputstr.h> /* for MAX_DEVICES */
@@ -86,6 +84,14 @@
 #define SCROLLFLAG	4
 #define MODEFLAG	8
 #define COMPOSEFLAG	16
+
+#ifndef ABS_MT_SLOT
+#define ABS_MT_SLOT 0x2f
+#endif
+
+#ifndef ABS_MT_TRACKING_ID
+#define ABS_MT_TRACKING_ID 0x39
+#endif
 
 static char *evdevDefaults[] = {
     "XkbRules",     "evdev",
@@ -114,18 +120,19 @@ static BOOL EvdevGrabDevice(InputInfoPtr pInfo, int grab, int ungrab);
 static void EvdevSetCalibration(InputInfoPtr pInfo, int num_calibration, int calibration[4]);
 static int EvdevOpenDevice(InputInfoPtr pInfo);
 
-#ifdef HAVE_PROPERTIES
-static void EvdevInitAxesLabels(EvdevPtr pEvdev, int natoms, Atom *atoms);
+static void EvdevInitAxesLabels(EvdevPtr pEvdev, int mode, int natoms, Atom *atoms);
 static void EvdevInitButtonLabels(EvdevPtr pEvdev, int natoms, Atom *atoms);
 static void EvdevInitProperty(DeviceIntPtr dev);
 static int EvdevSetProperty(DeviceIntPtr dev, Atom atom,
                             XIPropertyValuePtr val, BOOL checkonly);
-static Atom prop_invert = 0;
-static Atom prop_calibration = 0;
-static Atom prop_swap = 0;
-static Atom prop_axis_label = 0;
-static Atom prop_btn_label = 0;
-#endif
+static Atom prop_product_id;
+static Atom prop_invert;
+static Atom prop_calibration;
+static Atom prop_swap;
+static Atom prop_axis_label;
+static Atom prop_btn_label;
+static Atom prop_device;
+static Atom prop_virtual;
 
 static InputInfoPtr ahmLastEventDevice;
 
@@ -183,6 +190,16 @@ static size_t EvdevCountBits(unsigned long *array, size_t nlongs)
     return count;
 }
 
+static inline int EvdevBitIsSet(const unsigned long *array, int bit)
+{
+    return !!(array[bit / LONG_BITS] & (1LL << (bit % LONG_BITS)));
+}
+
+static inline void EvdevSetBit(unsigned long *array, int bit)
+{
+    array[bit / LONG_BITS] |= (1LL << (bit % LONG_BITS));
+}
+
 static int
 EvdevGetMajorMinor(InputInfoPtr pInfo)
 {
@@ -190,8 +207,8 @@ EvdevGetMajorMinor(InputInfoPtr pInfo)
 
     if (fstat(pInfo->fd, &st) == -1)
     {
-        xf86Msg(X_ERROR, "%s: stat failed (%s). cannot check for duplicates.\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "stat failed (%s). cannot check for duplicates.\n",
+                    strerror(errno));
         return 0;
     }
 
@@ -276,10 +293,45 @@ SetXkbOption(InputInfoPtr pInfo, char *name, char **option)
     }
 }
 
+static BOOL
+EvdevDeviceIsVirtual(const char* devicenode)
+{
+    struct udev *udev = NULL;
+    struct udev_device *device = NULL;
+    struct stat st;
+    int rc = FALSE;
+    const char *devpath;
+
+    udev = udev_new();
+    if (!udev)
+        goto out;
+
+    stat(devicenode, &st);
+    device = udev_device_new_from_devnum(udev, 'c', st.st_rdev);
+
+    if (!device)
+        goto out;
+
+
+    devpath = udev_device_get_devpath(device);
+    if (!devpath)
+        goto out;
+
+    if (strstr(devpath, "LNXSYSTM"))
+        rc = TRUE;
+
+out:
+    udev_device_unref(device);
+    udev_unref(udev);
+    return rc;
+}
+
+#ifndef HAVE_SMOOTH_SCROLLING
 static int wheel_up_button = 4;
 static int wheel_down_button = 5;
 static int wheel_left_button = 6;
 static int wheel_right_button = 7;
+#endif
 
 static EventQueuePtr
 EvdevNextInQueue(InputInfoPtr pInfo)
@@ -288,7 +340,7 @@ EvdevNextInQueue(InputInfoPtr pInfo)
 
     if (pEvdev->num_queue >= EVDEV_MAXQUEUE)
     {
-        xf86Msg(X_NONE, "%s: dropping event due to full queue!\n", pInfo->name);
+        xf86IDrvMsg(pInfo, X_NONE, "dropping event due to full queue!\n");
         return NULL;
     }
 
@@ -308,22 +360,14 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
 
   /* Filter all repeated events from device.
      We'll do softrepeat in the server, but only since 1.6 */
-  if (value == 2
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) <= 2
-      && (ev->code == KEY_LEFTCTRL || ev->code == KEY_RIGHTCTRL ||
-	  ev->code == KEY_LEFTSHIFT || ev->code == KEY_RIGHTSHIFT ||
-	  ev->code == KEY_LEFTALT || ev->code == KEY_RIGHTALT ||
-	  ev->code == KEY_LEFTMETA || ev->code == KEY_RIGHTMETA ||
-	  ev->code == KEY_CAPSLOCK || ev->code == KEY_NUMLOCK ||
-	  ev->code == KEY_SCROLLLOCK) /* XXX windows keys? */
-#endif
-      )
-    return 1;
+	  if (value == 2){
+	    return 1;
+	  }
 
   if ((pQueue = EvdevNextInQueue(pInfo)))
   {
     pQueue->type = EV_QUEUE_KEY;
-    pQueue->key = code;
+    pQueue->detail.key = code;
     pQueue->val = value;
     return 1;
   }
@@ -667,7 +711,7 @@ EvdevQueueButtonEvent(InputInfoPtr pInfo, int button, int value)
     if ((pQueue = EvdevNextInQueue(pInfo)))
     {
         pQueue->type = EV_QUEUE_BTN;
-        pQueue->key = button;
+        pQueue->detail.key = button;
         pQueue->val = value;
     }
     ahmLastEventDevice = pInfo;
@@ -680,19 +724,36 @@ EvdevQueueProximityEvent(InputInfoPtr pInfo, int value)
     if ((pQueue = EvdevNextInQueue(pInfo)))
     {
         pQueue->type = EV_QUEUE_PROXIMITY;
-        pQueue->key = 0;
+        pQueue->detail.key = 0;
         pQueue->val = value;
     }
 }
+
+#ifdef MULTITOUCH
+void
+EvdevQueueTouchEvent(InputInfoPtr pInfo, unsigned int touch, ValuatorMask *mask,
+                     uint16_t evtype)
+{
+    EventQueuePtr pQueue;
+    if ((pQueue = EvdevNextInQueue(pInfo)))
+    {
+        pQueue->type = EV_QUEUE_TOUCH;
+        pQueue->detail.touch = touch;
+        valuator_mask_copy(pQueue->touchMask, mask);
+        pQueue->val = evtype;
+    }
+}
+#endif
 
 /**
  * Post button event right here, right now.
  * Interface for MB emulation since these need to post immediately.
  */
 void
-EvdevPostButtonEvent(InputInfoPtr pInfo, int button, int value)
+EvdevPostButtonEvent(InputInfoPtr pInfo, int button, enum ButtonAction act)
 {
-    xf86PostButtonEvent(pInfo->dev, 0, button, value, 0, 0);
+    xf86PostButtonEvent(pInfo->dev, Relative, button,
+                        (act == BUTTON_PRESS) ? 1 : 0, 0, 0);
 }
 
 void
@@ -706,70 +767,70 @@ EvdevQueueButtonClicks(InputInfoPtr pInfo, int button, int count)
     }
 }
 
-#define ABS_X_VALUE 0x1
-#define ABS_Y_VALUE 0x2
-#define ABS_VALUE   0x4
 /**
  * Take the valuators and process them accordingly.
  */
 static void
-EvdevProcessValuators(InputInfoPtr pInfo, int v[MAX_VALUATORS], int *num_v,
-                      int *first_v)
+EvdevProcessValuators(InputInfoPtr pInfo)
 {
     int tmp;
     EvdevPtr pEvdev = pInfo->private;
-
-    *num_v = *first_v = 0;
+    int *delta = pEvdev->delta;
 
     /* convert to relative motion for touchpads */
     if (pEvdev->abs_queued && (pEvdev->flags & EVDEV_RELATIVE_MODE)) {
         if (pEvdev->in_proximity) {
-            if (pEvdev->old_vals[0] != -1)
-                pEvdev->delta[REL_X] = pEvdev->vals[0] - pEvdev->old_vals[0];
-            if (pEvdev->old_vals[1] != -1)
-                pEvdev->delta[REL_Y] = pEvdev->vals[1] - pEvdev->old_vals[1];
-            if (pEvdev->abs_queued & ABS_X_VALUE)
-                pEvdev->old_vals[0] = pEvdev->vals[0];
-            if (pEvdev->abs_queued & ABS_Y_VALUE)
-                pEvdev->old_vals[1] = pEvdev->vals[1];
+            if (valuator_mask_isset(pEvdev->vals, 0))
+            {
+                if (valuator_mask_isset(pEvdev->old_vals, 0))
+                    delta[REL_X] = valuator_mask_get(pEvdev->vals, 0) -
+                                   valuator_mask_get(pEvdev->old_vals, 0);
+                valuator_mask_set(pEvdev->old_vals, 0,
+                                  valuator_mask_get(pEvdev->vals, 0));
+            }
+            if (valuator_mask_isset(pEvdev->vals, 1))
+            {
+                if (valuator_mask_isset(pEvdev->old_vals, 1))
+                    delta[REL_Y] = valuator_mask_get(pEvdev->vals, 1) -
+                                   valuator_mask_get(pEvdev->old_vals, 1);
+                valuator_mask_set(pEvdev->old_vals, 1,
+                                  valuator_mask_get(pEvdev->vals, 1));
+            }
         } else {
-            pEvdev->old_vals[0] = pEvdev->old_vals[1] = -1;
+            valuator_mask_zero(pEvdev->old_vals);
         }
+        valuator_mask_zero(pEvdev->vals);
         pEvdev->abs_queued = 0;
         pEvdev->rel_queued = 1;
     }
 
     if (pEvdev->rel_queued) {
-        int first = REL_CNT, last = -1;
         int i;
 
         if (pEvdev->swap_axes) {
             tmp = pEvdev->delta[REL_X];
             pEvdev->delta[REL_X] = pEvdev->delta[REL_Y];
             pEvdev->delta[REL_Y] = tmp;
+            if (pEvdev->delta[REL_X] == 0)
+                valuator_mask_unset(pEvdev->vals, REL_X);
+            if (pEvdev->delta[REL_Y] == 0)
+                valuator_mask_unset(pEvdev->vals, REL_Y);
         }
         if (pEvdev->invert_x)
             pEvdev->delta[REL_X] *= -1;
         if (pEvdev->invert_y)
             pEvdev->delta[REL_Y] *= -1;
 
+
+        Evdev3BEmuProcessRelMotion(pInfo,
+                                   pEvdev->delta[REL_X],
+                                   pEvdev->delta[REL_Y]);
+
         for (i = 0; i < REL_CNT; i++)
         {
             int map = pEvdev->axis_map[i];
             if (pEvdev->delta[i] && map != -1)
-            {
-                v[map] = pEvdev->delta[i];
-                if (map < first)
-                    first = map;
-                if (map > last)
-                    last = map;
-            }
-        }
-
-        if (last >= 0)
-        {
-            *num_v = (last - first + 1);
-            *first_v = first;
+                valuator_mask_set(pEvdev->vals, map, pEvdev->delta[i]);
         }
     }
     /*
@@ -782,43 +843,60 @@ EvdevProcessValuators(InputInfoPtr pInfo, int v[MAX_VALUATORS], int *num_v,
      * just works.
      */
     else if (pEvdev->abs_queued && pEvdev->in_proximity) {
-        memcpy(v, pEvdev->vals, sizeof(int) * pEvdev->num_vals);
+        int i;
 
         if (pEvdev->swap_axes) {
-            int tmp = v[0];
-            v[0] = xf86ScaleAxis(v[1],
-                    pEvdev->absinfo[ABS_X].maximum,
-                    pEvdev->absinfo[ABS_X].minimum,
-                    pEvdev->absinfo[ABS_Y].maximum,
-                    pEvdev->absinfo[ABS_Y].minimum);
-            v[1] = xf86ScaleAxis(tmp,
-                    pEvdev->absinfo[ABS_Y].maximum,
-                    pEvdev->absinfo[ABS_Y].minimum,
-                    pEvdev->absinfo[ABS_X].maximum,
-                    pEvdev->absinfo[ABS_X].minimum);
+            int swapped_isset[2] = {0, 0};
+            int swapped_values[2];
+
+            for(i = 0; i <= 1; i++)
+                if (valuator_mask_isset(pEvdev->vals, i)) {
+                    swapped_isset[1 - i] = 1;
+                    swapped_values[1 - i] =
+                        xf86ScaleAxis(valuator_mask_get(pEvdev->vals, i),
+                                      pEvdev->absinfo[1 - i].maximum,
+                                      pEvdev->absinfo[1 - i].minimum,
+                                      pEvdev->absinfo[i].maximum,
+                                      pEvdev->absinfo[i].minimum);
+                }
+
+            for (i = 0; i <= 1; i++)
+                if (swapped_isset[i])
+                    valuator_mask_set(pEvdev->vals, i, swapped_values[i]);
+                else
+                    valuator_mask_unset(pEvdev->vals, i);
         }
 
-        if (pEvdev->flags & EVDEV_CALIBRATED)
-        {
-            v[0] = xf86ScaleAxis(v[0],
-                    pEvdev->absinfo[ABS_X].maximum,
-                    pEvdev->absinfo[ABS_X].minimum,
-                    pEvdev->calibration.max_x, pEvdev->calibration.min_x);
-            v[1] = xf86ScaleAxis(v[1],
-                    pEvdev->absinfo[ABS_Y].maximum,
-                    pEvdev->absinfo[ABS_Y].minimum,
-                    pEvdev->calibration.max_y, pEvdev->calibration.min_y);
+        for (i = 0; i <= 1; i++) {
+            int val;
+            int calib_min;
+            int calib_max;
+
+            if (!valuator_mask_isset(pEvdev->vals, i))
+                continue;
+
+            val = valuator_mask_get(pEvdev->vals, i);
+
+            if (i == 0) {
+                calib_min = pEvdev->calibration.min_x;
+                calib_max = pEvdev->calibration.max_x;
+            } else {
+                calib_min = pEvdev->calibration.min_y;
+                calib_max = pEvdev->calibration.max_y;
+            }
+
+            if (pEvdev->flags & EVDEV_CALIBRATED)
+                val = xf86ScaleAxis(val, pEvdev->absinfo[i].maximum,
+                                    pEvdev->absinfo[i].minimum, calib_max,
+                                    calib_min);
+
+            if ((i == 0 && pEvdev->invert_x) || (i == 1 && pEvdev->invert_y))
+                val = (pEvdev->absinfo[i].maximum - val +
+                       pEvdev->absinfo[i].minimum);
+
+            valuator_mask_set(pEvdev->vals, i, val);
         }
-
-        if (pEvdev->invert_x)
-            v[0] = (pEvdev->absinfo[ABS_X].maximum - v[0] +
-                    pEvdev->absinfo[ABS_X].minimum);
-        if (pEvdev->invert_y)
-            v[1] = (pEvdev->absinfo[ABS_Y].maximum - v[1] +
-                    pEvdev->absinfo[ABS_Y].minimum);
-
-        *num_v = pEvdev->num_vals;
-        *first_v = 0;
+        Evdev3BEmuProcessAbsMotion(pInfo, pEvdev->vals);
     }
 }
 
@@ -856,11 +934,18 @@ EvdevProcessProximityState(InputInfoPtr pInfo)
     int prox_state = 0;
     int i;
 
+    /* Does this device have any proximity axes? */
+    if (!pEvdev->prox)
+        return 0;
+
     /* no proximity change in the queue */
     if (!pEvdev->prox_queued)
     {
         if (pEvdev->abs_queued && !pEvdev->in_proximity)
-            pEvdev->abs_prox = pEvdev->abs_queued;
+            for (i = 0; i < valuator_mask_size(pEvdev->vals); i++)
+                if (valuator_mask_isset(pEvdev->vals, i))
+                    valuator_mask_set(pEvdev->prox, i,
+                                      valuator_mask_get(pEvdev->vals, i));
         return 0;
     }
 
@@ -878,11 +963,14 @@ EvdevProcessProximityState(InputInfoPtr pInfo)
     {
         /* We're about to go into/out of proximity but have no abs events
          * within the EV_SYN. Use the last coordinates we have. */
-        if (!pEvdev->abs_queued && pEvdev->abs_prox)
-        {
-            pEvdev->abs_queued = pEvdev->abs_prox;
-            pEvdev->abs_prox = 0;
-        }
+        for (i = 0; i < valuator_mask_size(pEvdev->prox); i++)
+            if (!valuator_mask_isset(pEvdev->vals, i) &&
+                valuator_mask_isset(pEvdev->prox, i))
+                valuator_mask_set(pEvdev->vals, i,
+                                  valuator_mask_get(pEvdev->prox, i));
+        valuator_mask_zero(pEvdev->prox);
+
+        pEvdev->abs_queued = valuator_mask_size(pEvdev->vals);
     }
 
     pEvdev->in_proximity = prox_state;
@@ -928,11 +1016,13 @@ EvdevProcessRelativeMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
 {
     int value;
     EvdevPtr pEvdev = pInfo->private;
+    int map;
 
     /* Get the signed value, earlier kernels had this as unsigned */
     value = ev->value;
 
     switch (ev->code) {
+#ifndef HAVE_SMOOTH_SCROLLING
         case REL_WHEEL:
             if (value > 0)
                 EvdevQueueButtonClicks(pInfo, wheel_up_button, value);
@@ -947,8 +1037,8 @@ EvdevProcessRelativeMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
             else if (value < 0)
                 EvdevQueueButtonClicks(pInfo, wheel_left_button, -value);
             break;
-
         /* We don't post wheel events as axis motion. */
+#endif
         default:
             /* Ignore EV_REL events if we never set up for them. */
             if (!(pEvdev->flags & EVDEV_RELATIVE_EVENTS))
@@ -960,9 +1050,100 @@ EvdevProcessRelativeMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
 
             pEvdev->rel_queued = 1;
             pEvdev->delta[ev->code] += value;
+            map = pEvdev->axis_map[ev->code];
+            valuator_mask_set(pEvdev->vals, map, value);
             break;
     }
 }
+
+#ifdef MULTITOUCH
+static void
+EvdevProcessTouch(InputInfoPtr pInfo)
+{
+    EvdevPtr pEvdev = pInfo->private;
+    int type;
+
+    if (pEvdev->cur_slot < 0 || !pEvdev->mt_mask)
+        return;
+
+    /* If the ABS_MT_SLOT is the first event we get after EV_SYN, skip this */
+    if (pEvdev->slot_state == SLOTSTATE_EMPTY)
+        return;
+
+    if (pEvdev->slot_state == SLOTSTATE_CLOSE)
+        type = XI_TouchEnd;
+    else if (pEvdev->slot_state == SLOTSTATE_OPEN)
+        type = XI_TouchBegin;
+    else
+        type = XI_TouchUpdate;
+
+
+    EvdevQueueTouchEvent(pInfo, pEvdev->cur_slot, pEvdev->mt_mask, type);
+
+    pEvdev->slot_state = SLOTSTATE_EMPTY;
+
+    valuator_mask_zero(pEvdev->mt_mask);
+}
+
+static int
+num_slots(EvdevPtr pEvdev)
+{
+    int value = pEvdev->absinfo[ABS_MT_SLOT].maximum -
+                pEvdev->absinfo[ABS_MT_SLOT].minimum + 1;
+
+    /* If we don't know how many slots there are, assume at least 10 */
+    return value > 1 ? value : 10;
+}
+
+static int
+last_mt_vals_slot(EvdevPtr pEvdev)
+{
+    int value = pEvdev->cur_slot - pEvdev->absinfo[ABS_MT_SLOT].minimum;
+
+    return value < num_slots(pEvdev) ? value : -1;
+}
+
+static void
+EvdevProcessTouchEvent(InputInfoPtr pInfo, struct input_event *ev)
+{
+    EvdevPtr pEvdev = pInfo->private;
+    int map;
+
+    if (ev->code == ABS_MT_SLOT) {
+        EvdevProcessTouch(pInfo);
+        pEvdev->cur_slot = ev->value;
+    } else
+    {
+        int slot_index = last_mt_vals_slot(pEvdev);
+
+        if (pEvdev->slot_state == SLOTSTATE_EMPTY)
+            pEvdev->slot_state = SLOTSTATE_UPDATE;
+        if (ev->code == ABS_MT_TRACKING_ID) {
+            if (ev->value >= 0) {
+                pEvdev->slot_state = SLOTSTATE_OPEN;
+
+                if (slot_index >= 0)
+                    valuator_mask_copy(pEvdev->mt_mask,
+                                       pEvdev->last_mt_vals[slot_index]);
+                else
+                    xf86IDrvMsg(pInfo, X_WARNING,
+                                "Attempted to copy values from out-of-range "
+                                "slot, touch events may be incorrect.\n");
+            } else
+                pEvdev->slot_state = SLOTSTATE_CLOSE;
+        } else {
+            map = pEvdev->axis_map[ev->code];
+            valuator_mask_set(pEvdev->mt_mask, map, ev->value);
+            if (slot_index >= 0)
+                valuator_mask_set(pEvdev->last_mt_vals[slot_index], map,
+                                  ev->value);
+        }
+    }
+}
+#else
+#define EvdevProcessTouch(pInfo)
+#define EvdevProcessTouchEvent(pInfo, ev)
+#endif /* MULTITOUCH */
 
 /**
  * Take the absolute motion input event and process it accordingly.
@@ -972,6 +1153,7 @@ EvdevProcessAbsoluteMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
 {
     int value;
     EvdevPtr pEvdev = pInfo->private;
+    int map;
 
     /* Get the signed value, earlier kernels had this as unsigned */
     value = ev->value;
@@ -986,13 +1168,14 @@ EvdevProcessAbsoluteMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
     if (EvdevWheelEmuFilterMotion(pInfo, ev))
         return;
 
-    pEvdev->vals[pEvdev->axis_map[ev->code]] = value;
-    if (ev->code == ABS_X)
-        pEvdev->abs_queued |= ABS_X_VALUE;
-    else if (ev->code == ABS_Y)
-        pEvdev->abs_queued |= ABS_Y_VALUE;
-    else
-        pEvdev->abs_queued |= ABS_VALUE;
+    if (ev->code >= ABS_MT_SLOT) {
+        EvdevProcessTouchEvent(pInfo, ev);
+        pEvdev->abs_queued = 1;
+    } else if (!pEvdev->mt_mask) {
+        map = pEvdev->axis_map[ev->code];
+        valuator_mask_set(pEvdev->vals, map, value);
+        pEvdev->abs_queued = 1;
+    }
 }
 
 /**
@@ -1027,7 +1210,8 @@ EvdevProcessKeyEvent(InputInfoPtr pInfo, struct input_event *ev)
              * BTN_TOUCH as the proximity notifier */
             if (!pEvdev->use_proximity)
                 pEvdev->in_proximity = value ? ev->code : 0;
-            if (!(pEvdev->flags & (EVDEV_TOUCHSCREEN | EVDEV_TABLET)))
+            if (!(pEvdev->flags & (EVDEV_TOUCHSCREEN | EVDEV_TABLET)) ||
+                pEvdev->mt_mask)
                 break;
             /* Treat BTN_TOUCH from devices that only have BTN_TOUCH as
              * BTN_LEFT. */
@@ -1050,7 +1234,7 @@ EvdevPostRelativeMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
     EvdevPtr pEvdev = pInfo->private;
 
     if (pEvdev->rel_queued) {
-        xf86PostMotionEventP(pInfo->dev, FALSE, first_v, num_v, v + first_v);
+        xf86PostMotionEventM(pInfo->dev, Relative, pEvdev->vals);
     }
 }
 
@@ -1073,7 +1257,7 @@ EvdevPostAbsoluteMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
      * this scheme still just work.
      */
     if (pEvdev->abs_queued && pEvdev->in_proximity) {
-        xf86PostMotionEventP(pInfo->dev, TRUE, first_v, num_v, v + first_v);
+        xf86PostMotionEventM(pInfo->dev, Absolute, pEvdev->vals);
     }
 }
 
@@ -1088,6 +1272,9 @@ EvdevPostProximityEvents(InputInfoPtr pInfo, int which, int num_v, int first_v,
         switch (pEvdev->queue[i].type) {
             case EV_QUEUE_KEY:
             case EV_QUEUE_BTN:
+#ifdef MULTITOUCH
+            case EV_QUEUE_TOUCH:
+#endif
                 break;
             case EV_QUEUE_PROXIMITY:
                 if (pEvdev->queue[i].val == which)
@@ -1118,26 +1305,36 @@ static void EvdevPostQueuedEvents(InputInfoPtr pInfo, int num_v, int first_v,
 	   * In ahm, they're queued, and sent asynchronously using timer.
 	   * Actual flushing is done in AhmWakeupHandler.
 	   */
-	  pEvdev->ahmQueueKeys[ind] = pEvdev->queue[i].key;
+	  pEvdev->ahmQueueKeys[ind] = pEvdev->queue[i].detail.key;
 	  pEvdev->ahmQueueValues[ind] = pEvdev->queue[i].val;
 	  ind++;
 	  ind %= AHM_QUEUE_SIZE;
 	  break;
 
         case EV_QUEUE_BTN:
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 11
+            if (Evdev3BEmuFilterEvent(pInfo,
+                                      pEvdev->queue[i].detail.key,
+                                      pEvdev->queue[i].val))
+                break;
+
             if (pEvdev->abs_queued && pEvdev->in_proximity) {
-                xf86PostButtonEventP(pInfo->dev, 1, pEvdev->queue[i].key,
+                xf86PostButtonEventP(pInfo->dev, Absolute, pEvdev->queue[i].detail.key,
                                      pEvdev->queue[i].val, first_v, num_v,
                                      v + first_v);
 
             } else
-#endif
-                xf86PostButtonEvent(pInfo->dev, 0, pEvdev->queue[i].key,
+                xf86PostButtonEvent(pInfo->dev, Relative, pEvdev->queue[i].detail.key,
                                     pEvdev->queue[i].val, 0, 0);
             break;
         case EV_QUEUE_PROXIMITY:
             break;
+#ifdef MULTITOUCH
+        case EV_QUEUE_TOUCH:
+            xf86PostTouchEvent(pInfo->dev, pEvdev->queue[i].detail.touch,
+                               pEvdev->queue[i].val, 0,
+                               pEvdev->queue[i].touchMask);
+            break;
+#endif
         }
     }
     if(pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
@@ -1153,13 +1350,15 @@ static void EvdevPostQueuedEvents(InputInfoPtr pInfo, int num_v, int first_v,
 static void
 EvdevProcessSyncEvent(InputInfoPtr pInfo, struct input_event *ev)
 {
+    int i;
     int num_v = 0, first_v = 0;
     int v[MAX_VALUATORS] = {};
     EvdevPtr pEvdev = pInfo->private;
 
     EvdevProcessProximityState(pInfo);
 
-    EvdevProcessValuators(pInfo, v, &num_v, &first_v);
+    EvdevProcessValuators(pInfo);
+    EvdevProcessTouch(pInfo);
 
     EvdevPostProximityEvents(pInfo, TRUE, num_v, first_v, v);
     EvdevPostRelativeMotionEvents(pInfo, num_v, first_v, v);
@@ -1168,7 +1367,17 @@ EvdevProcessSyncEvent(InputInfoPtr pInfo, struct input_event *ev)
     EvdevPostProximityEvents(pInfo, FALSE, num_v, first_v, v);
 
     memset(pEvdev->delta, 0, sizeof(pEvdev->delta));
-    memset(pEvdev->queue, 0, sizeof(pEvdev->queue));
+    for (i = 0; i < ArrayLength(pEvdev->queue); i++)
+    {
+        EventQueuePtr queue = &pEvdev->queue[i];
+        queue->detail.key = 0;
+        queue->type = 0;
+        queue->val = 0;
+        /* don't reset the touchMask */
+    }
+
+    if (pEvdev->vals)
+        valuator_mask_zero(pEvdev->vals);
     pEvdev->num_queue = 0;
     pEvdev->abs_queued = 0;
     pEvdev->rel_queued = 0;
@@ -1203,6 +1412,28 @@ EvdevProcessEvent(InputInfoPtr pInfo, struct input_event *ev)
 #undef ABS_Y_VALUE
 #undef ABS_VALUE
 
+static void
+EvdevFreeMasks(EvdevPtr pEvdev)
+{
+    int i;
+
+    valuator_mask_free(&pEvdev->vals);
+    valuator_mask_free(&pEvdev->old_vals);
+    valuator_mask_free(&pEvdev->prox);
+#ifdef MULTITOUCH
+    valuator_mask_free(&pEvdev->mt_mask);
+    if (pEvdev->last_mt_vals)
+    {
+        for (i = 0; i < num_slots(pEvdev); i++)
+            valuator_mask_free(&pEvdev->last_mt_vals[i]);
+        free(pEvdev->last_mt_vals);
+        pEvdev->last_mt_vals = NULL;
+    }
+    for (i = 0; i < EVDEV_MAXQUEUE; i++)
+        valuator_mask_free(&pEvdev->queue[i].touchMask);
+#endif
+}
+
 /* just a magic number to reduce the number of reads */
 #define NUM_EVENTS 16
 
@@ -1214,12 +1445,22 @@ EvdevReadInput(InputInfoPtr pInfo)
 
     while (len == sizeof(ev))
     {
-        len = read(pInfo->fd, &ev, sizeof(ev));
+#ifdef MULTITOUCH
+        EvdevPtr pEvdev = pInfo->private;
+
+        if (pEvdev->mtdev)
+            len = mtdev_get(pEvdev->mtdev, pInfo->fd, ev, NUM_EVENTS) *
+                sizeof(struct input_event);
+        else
+#endif
+            len = read(pInfo->fd, &ev, sizeof(ev));
+
         if (len <= 0)
         {
             if (errno == ENODEV) /* May happen after resume */
             {
                 EvdevMBEmuFinalize(pInfo);
+                Evdev3BEmuFinalize(pInfo);
                 xf86RemoveEnabledDevice(pInfo);
                 close(pInfo->fd);
                 pInfo->fd = -1;
@@ -1245,324 +1486,11 @@ EvdevReadInput(InputInfoPtr pInfo)
     }
 }
 
-#define TestBit(bit, array) ((array[(bit) / LONG_BITS]) & (1L << ((bit) % LONG_BITS)))
-
 static void
 EvdevPtrCtrlProc(DeviceIntPtr device, PtrCtrl *ctrl)
 {
     /* Nothing to do, dix handles all settings */
 }
-
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 5
-static KeySym map[] = {
-    /* 0x00 */  NoSymbol,       NoSymbol,
-    /* 0x01 */  XK_Escape,      NoSymbol,
-    /* 0x02 */  XK_1,           XK_exclam,
-    /* 0x03 */  XK_2,           XK_at,
-    /* 0x04 */  XK_3,           XK_numbersign,
-    /* 0x05 */  XK_4,           XK_dollar,
-    /* 0x06 */  XK_5,           XK_percent,
-    /* 0x07 */  XK_6,           XK_asciicircum,
-    /* 0x08 */  XK_7,           XK_ampersand,
-    /* 0x09 */  XK_8,           XK_asterisk,
-    /* 0x0a */  XK_9,           XK_parenleft,
-    /* 0x0b */  XK_0,           XK_parenright,
-    /* 0x0c */  XK_minus,       XK_underscore,
-    /* 0x0d */  XK_equal,       XK_plus,
-    /* 0x0e */  XK_BackSpace,   NoSymbol,
-    /* 0x0f */  XK_Tab,         XK_ISO_Left_Tab,
-    /* 0x10 */  XK_Q,           NoSymbol,
-    /* 0x11 */  XK_W,           NoSymbol,
-    /* 0x12 */  XK_E,           NoSymbol,
-    /* 0x13 */  XK_R,           NoSymbol,
-    /* 0x14 */  XK_T,           NoSymbol,
-    /* 0x15 */  XK_Y,           NoSymbol,
-    /* 0x16 */  XK_U,           NoSymbol,
-    /* 0x17 */  XK_I,           NoSymbol,
-    /* 0x18 */  XK_O,           NoSymbol,
-    /* 0x19 */  XK_P,           NoSymbol,
-    /* 0x1a */  XK_bracketleft, XK_braceleft,
-    /* 0x1b */  XK_bracketright,XK_braceright,
-    /* 0x1c */  XK_Return,      NoSymbol,
-    /* 0x1d */  XK_Control_L,   NoSymbol,
-    /* 0x1e */  XK_A,           NoSymbol,
-    /* 0x1f */  XK_S,           NoSymbol,
-    /* 0x20 */  XK_D,           NoSymbol,
-    /* 0x21 */  XK_F,           NoSymbol,
-    /* 0x22 */  XK_G,           NoSymbol,
-    /* 0x23 */  XK_H,           NoSymbol,
-    /* 0x24 */  XK_J,           NoSymbol,
-    /* 0x25 */  XK_K,           NoSymbol,
-    /* 0x26 */  XK_L,           NoSymbol,
-    /* 0x27 */  XK_semicolon,   XK_colon,
-    /* 0x28 */  XK_quoteright,  XK_quotedbl,
-    /* 0x29 */  XK_quoteleft,	XK_asciitilde,
-    /* 0x2a */  XK_Shift_L,     NoSymbol,
-    /* 0x2b */  XK_backslash,   XK_bar,
-    /* 0x2c */  XK_Z,           NoSymbol,
-    /* 0x2d */  XK_X,           NoSymbol,
-    /* 0x2e */  XK_C,           NoSymbol,
-    /* 0x2f */  XK_V,           NoSymbol,
-    /* 0x30 */  XK_B,           NoSymbol,
-    /* 0x31 */  XK_N,           NoSymbol,
-    /* 0x32 */  XK_M,           NoSymbol,
-    /* 0x33 */  XK_comma,       XK_less,
-    /* 0x34 */  XK_period,      XK_greater,
-    /* 0x35 */  XK_slash,       XK_question,
-    /* 0x36 */  XK_Shift_R,     NoSymbol,
-    /* 0x37 */  XK_KP_Multiply, NoSymbol,
-    /* 0x38 */  XK_Alt_L,	XK_Meta_L,
-    /* 0x39 */  XK_space,       NoSymbol,
-    /* 0x3a */  XK_Caps_Lock,   NoSymbol,
-    /* 0x3b */  XK_F1,          NoSymbol,
-    /* 0x3c */  XK_F2,          NoSymbol,
-    /* 0x3d */  XK_F3,          NoSymbol,
-    /* 0x3e */  XK_F4,          NoSymbol,
-    /* 0x3f */  XK_F5,          NoSymbol,
-    /* 0x40 */  XK_F6,          NoSymbol,
-    /* 0x41 */  XK_F7,          NoSymbol,
-    /* 0x42 */  XK_F8,          NoSymbol,
-    /* 0x43 */  XK_F9,          NoSymbol,
-    /* 0x44 */  XK_F10,         NoSymbol,
-    /* 0x45 */  XK_Num_Lock,    NoSymbol,
-    /* 0x46 */  XK_Scroll_Lock,	NoSymbol,
-    /* These KP keys should have the KP_7 keysyms in the numlock
-     * modifer... ? */
-    /* 0x47 */  XK_KP_Home,	XK_KP_7,
-    /* 0x48 */  XK_KP_Up,	XK_KP_8,
-    /* 0x49 */  XK_KP_Prior,	XK_KP_9,
-    /* 0x4a */  XK_KP_Subtract, NoSymbol,
-    /* 0x4b */  XK_KP_Left,	XK_KP_4,
-    /* 0x4c */  XK_KP_Begin,	XK_KP_5,
-    /* 0x4d */  XK_KP_Right,	XK_KP_6,
-    /* 0x4e */  XK_KP_Add,      NoSymbol,
-    /* 0x4f */  XK_KP_End,	XK_KP_1,
-    /* 0x50 */  XK_KP_Down,	XK_KP_2,
-    /* 0x51 */  XK_KP_Next,	XK_KP_3,
-    /* 0x52 */  XK_KP_Insert,	XK_KP_0,
-    /* 0x53 */  XK_KP_Delete,	XK_KP_Decimal,
-    /* 0x54 */  NoSymbol,	NoSymbol,
-    /* 0x55 */  XK_F13,		NoSymbol,
-    /* 0x56 */  XK_less,	XK_greater,
-    /* 0x57 */  XK_F11,		NoSymbol,
-    /* 0x58 */  XK_F12,		NoSymbol,
-    /* 0x59 */  XK_F14,		NoSymbol,
-    /* 0x5a */  XK_F15,		NoSymbol,
-    /* 0x5b */  XK_F16,		NoSymbol,
-    /* 0x5c */  XK_F17,		NoSymbol,
-    /* 0x5d */  XK_F18,		NoSymbol,
-    /* 0x5e */  XK_F19,		NoSymbol,
-    /* 0x5f */  XK_F20,		NoSymbol,
-    /* 0x60 */  XK_KP_Enter,	NoSymbol,
-    /* 0x61 */  XK_Control_R,	NoSymbol,
-    /* 0x62 */  XK_KP_Divide,	NoSymbol,
-    /* 0x63 */  XK_Print,	XK_Sys_Req,
-    /* 0x64 */  XK_Alt_R,	XK_Meta_R,
-    /* 0x65 */  NoSymbol,	NoSymbol, /* KEY_LINEFEED */
-    /* 0x66 */  XK_Home,	NoSymbol,
-    /* 0x67 */  XK_Up,		NoSymbol,
-    /* 0x68 */  XK_Prior,	NoSymbol,
-    /* 0x69 */  XK_Left,	NoSymbol,
-    /* 0x6a */  XK_Right,	NoSymbol,
-    /* 0x6b */  XK_End,		NoSymbol,
-    /* 0x6c */  XK_Down,	NoSymbol,
-    /* 0x6d */  XK_Next,	NoSymbol,
-    /* 0x6e */  XK_Insert,	NoSymbol,
-    /* 0x6f */  XK_Delete,	NoSymbol,
-    /* 0x70 */  NoSymbol,	NoSymbol, /* KEY_MACRO */
-    /* 0x71 */  NoSymbol,	NoSymbol,
-    /* 0x72 */  NoSymbol,	NoSymbol,
-    /* 0x73 */  NoSymbol,	NoSymbol,
-    /* 0x74 */  NoSymbol,	NoSymbol,
-    /* 0x75 */  XK_KP_Equal,	NoSymbol,
-    /* 0x76 */  NoSymbol,	NoSymbol,
-    /* 0x77 */  NoSymbol,	NoSymbol,
-    /* 0x78 */  XK_F21,		NoSymbol,
-    /* 0x79 */  XK_F22,		NoSymbol,
-    /* 0x7a */  XK_F23,		NoSymbol,
-    /* 0x7b */  XK_F24,		NoSymbol,
-    /* 0x7c */  XK_KP_Separator, NoSymbol,
-    /* 0x7d */  XK_Meta_L,	NoSymbol,
-    /* 0x7e */  XK_Meta_R,	NoSymbol,
-    /* 0x7f */  XK_Multi_key,	NoSymbol,
-    /* 0x80 */  NoSymbol,	NoSymbol,
-    /* 0x81 */  NoSymbol,	NoSymbol,
-    /* 0x82 */  NoSymbol,	NoSymbol,
-    /* 0x83 */  NoSymbol,	NoSymbol,
-    /* 0x84 */  NoSymbol,	NoSymbol,
-    /* 0x85 */  NoSymbol,	NoSymbol,
-    /* 0x86 */  NoSymbol,	NoSymbol,
-    /* 0x87 */  NoSymbol,	NoSymbol,
-    /* 0x88 */  NoSymbol,	NoSymbol,
-    /* 0x89 */  NoSymbol,	NoSymbol,
-    /* 0x8a */  NoSymbol,	NoSymbol,
-    /* 0x8b */  NoSymbol,	NoSymbol,
-    /* 0x8c */  NoSymbol,	NoSymbol,
-    /* 0x8d */  NoSymbol,	NoSymbol,
-    /* 0x8e */  NoSymbol,	NoSymbol,
-    /* 0x8f */  NoSymbol,	NoSymbol,
-    /* 0x90 */  NoSymbol,	NoSymbol,
-    /* 0x91 */  NoSymbol,	NoSymbol,
-    /* 0x92 */  NoSymbol,	NoSymbol,
-    /* 0x93 */  NoSymbol,	NoSymbol,
-    /* 0x94 */  NoSymbol,	NoSymbol,
-    /* 0x95 */  NoSymbol,	NoSymbol,
-    /* 0x96 */  NoSymbol,	NoSymbol,
-    /* 0x97 */  NoSymbol,	NoSymbol,
-    /* 0x98 */  NoSymbol,	NoSymbol,
-    /* 0x99 */  NoSymbol,	NoSymbol,
-    /* 0x9a */  NoSymbol,	NoSymbol,
-    /* 0x9b */  NoSymbol,	NoSymbol,
-    /* 0x9c */  NoSymbol,	NoSymbol,
-    /* 0x9d */  NoSymbol,	NoSymbol,
-    /* 0x9e */  NoSymbol,	NoSymbol,
-    /* 0x9f */  NoSymbol,	NoSymbol,
-    /* 0xa0 */  NoSymbol,	NoSymbol,
-    /* 0xa1 */  NoSymbol,	NoSymbol,
-    /* 0xa2 */  NoSymbol,	NoSymbol,
-    /* 0xa3 */  NoSymbol,	NoSymbol,
-    /* 0xa4 */  NoSymbol,	NoSymbol,
-    /* 0xa5 */  NoSymbol,	NoSymbol,
-    /* 0xa6 */  NoSymbol,	NoSymbol,
-    /* 0xa7 */  NoSymbol,	NoSymbol,
-    /* 0xa8 */  NoSymbol,	NoSymbol,
-    /* 0xa9 */  NoSymbol,	NoSymbol,
-    /* 0xaa */  NoSymbol,	NoSymbol,
-    /* 0xab */  NoSymbol,	NoSymbol,
-    /* 0xac */  NoSymbol,	NoSymbol,
-    /* 0xad */  NoSymbol,	NoSymbol,
-    /* 0xae */  NoSymbol,	NoSymbol,
-    /* 0xaf */  NoSymbol,	NoSymbol,
-    /* 0xb0 */  NoSymbol,	NoSymbol,
-    /* 0xb1 */  NoSymbol,	NoSymbol,
-    /* 0xb2 */  NoSymbol,	NoSymbol,
-    /* 0xb3 */  NoSymbol,	NoSymbol,
-    /* 0xb4 */  NoSymbol,	NoSymbol,
-    /* 0xb5 */  NoSymbol,	NoSymbol,
-    /* 0xb6 */  NoSymbol,	NoSymbol,
-    /* 0xb7 */  NoSymbol,	NoSymbol,
-    /* 0xb8 */  NoSymbol,	NoSymbol,
-    /* 0xb9 */  NoSymbol,	NoSymbol,
-    /* 0xba */  NoSymbol,	NoSymbol,
-    /* 0xbb */  NoSymbol,	NoSymbol,
-    /* 0xbc */  NoSymbol,	NoSymbol,
-    /* 0xbd */  NoSymbol,	NoSymbol,
-    /* 0xbe */  NoSymbol,	NoSymbol,
-    /* 0xbf */  NoSymbol,	NoSymbol,
-    /* 0xc0 */  NoSymbol,	NoSymbol,
-    /* 0xc1 */  NoSymbol,	NoSymbol,
-    /* 0xc2 */  NoSymbol,	NoSymbol,
-    /* 0xc3 */  NoSymbol,	NoSymbol,
-    /* 0xc4 */  NoSymbol,	NoSymbol,
-    /* 0xc5 */  NoSymbol,	NoSymbol,
-    /* 0xc6 */  NoSymbol,	NoSymbol,
-    /* 0xc7 */  NoSymbol,	NoSymbol,
-    /* 0xc8 */  NoSymbol,	NoSymbol,
-    /* 0xc9 */  NoSymbol,	NoSymbol,
-    /* 0xca */  NoSymbol,	NoSymbol,
-    /* 0xcb */  NoSymbol,	NoSymbol,
-    /* 0xcc */  NoSymbol,	NoSymbol,
-    /* 0xcd */  NoSymbol,	NoSymbol,
-    /* 0xce */  NoSymbol,	NoSymbol,
-    /* 0xcf */  NoSymbol,	NoSymbol,
-    /* 0xd0 */  NoSymbol,	NoSymbol,
-    /* 0xd1 */  NoSymbol,	NoSymbol,
-    /* 0xd2 */  NoSymbol,	NoSymbol,
-    /* 0xd3 */  NoSymbol,	NoSymbol,
-    /* 0xd4 */  NoSymbol,	NoSymbol,
-    /* 0xd5 */  NoSymbol,	NoSymbol,
-    /* 0xd6 */  NoSymbol,	NoSymbol,
-    /* 0xd7 */  NoSymbol,	NoSymbol,
-    /* 0xd8 */  NoSymbol,	NoSymbol,
-    /* 0xd9 */  NoSymbol,	NoSymbol,
-    /* 0xda */  NoSymbol,	NoSymbol,
-    /* 0xdb */  NoSymbol,	NoSymbol,
-    /* 0xdc */  NoSymbol,	NoSymbol,
-    /* 0xdd */  NoSymbol,	NoSymbol,
-    /* 0xde */  NoSymbol,	NoSymbol,
-    /* 0xdf */  NoSymbol,	NoSymbol,
-    /* 0xe0 */  NoSymbol,	NoSymbol,
-    /* 0xe1 */  NoSymbol,	NoSymbol,
-    /* 0xe2 */  NoSymbol,	NoSymbol,
-    /* 0xe3 */  NoSymbol,	NoSymbol,
-    /* 0xe4 */  NoSymbol,	NoSymbol,
-    /* 0xe5 */  NoSymbol,	NoSymbol,
-    /* 0xe6 */  NoSymbol,	NoSymbol,
-    /* 0xe7 */  NoSymbol,	NoSymbol,
-    /* 0xe8 */  NoSymbol,	NoSymbol,
-    /* 0xe9 */  NoSymbol,	NoSymbol,
-    /* 0xea */  NoSymbol,	NoSymbol,
-    /* 0xeb */  NoSymbol,	NoSymbol,
-    /* 0xec */  NoSymbol,	NoSymbol,
-    /* 0xed */  NoSymbol,	NoSymbol,
-    /* 0xee */  NoSymbol,	NoSymbol,
-    /* 0xef */  NoSymbol,	NoSymbol,
-    /* 0xf0 */  NoSymbol,	NoSymbol,
-    /* 0xf1 */  NoSymbol,	NoSymbol,
-    /* 0xf2 */  NoSymbol,	NoSymbol,
-    /* 0xf3 */  NoSymbol,	NoSymbol,
-    /* 0xf4 */  NoSymbol,	NoSymbol,
-    /* 0xf5 */  NoSymbol,	NoSymbol,
-    /* 0xf6 */  NoSymbol,	NoSymbol,
-    /* 0xf7 */  NoSymbol,	NoSymbol,
-};
-
-static struct { KeySym keysym; CARD8 mask; } modifiers[] = {
-    { XK_Shift_L,		ShiftMask },
-    { XK_Shift_R,		ShiftMask },
-    { XK_Control_L,		ControlMask },
-    { XK_Control_R,		ControlMask },
-    { XK_Caps_Lock,		LockMask },
-    { XK_Alt_L,		AltMask },
-    { XK_Alt_R,		AltMask },
-    { XK_Meta_L,		Mod4Mask },
-    { XK_Meta_R,		Mod4Mask },
-    { XK_Num_Lock,		NumLockMask },
-    { XK_Scroll_Lock,	ScrollLockMask },
-    { XK_Mode_switch,	AltLangMask }
-};
-
-/* Server 1.6 and earlier */
-static int
-EvdevInitKeysyms(DeviceIntPtr device)
-{
-    InputInfoPtr pInfo;
-    EvdevPtr pEvdev;
-    KeySymsRec keySyms;
-    CARD8 modMap[MAP_LENGTH];
-    KeySym sym;
-    int i, j;
-
-    pInfo = device->public.devicePrivate;
-    pEvdev = pInfo->private;
-
-     /* Compute the modifier map */
-    memset(modMap, 0, sizeof modMap);
-
-    for (i = 0; i < ArrayLength(map) / GLYPHS_PER_KEY; i++) {
-        sym = map[i * GLYPHS_PER_KEY];
-        for (j = 0; j < ArrayLength(modifiers); j++) {
-            if (modifiers[j].keysym == sym)
-                modMap[i + MIN_KEYCODE] = modifiers[j].mask;
-        }
-    }
-
-    keySyms.map        = map;
-    keySyms.mapWidth   = GLYPHS_PER_KEY;
-    keySyms.minKeyCode = MIN_KEYCODE;
-    keySyms.maxKeyCode = MIN_KEYCODE + ArrayLength(map) / GLYPHS_PER_KEY - 1;
-
-    XkbSetRulesDflts(pEvdev->rmlvo.rules, pEvdev->rmlvo.model,
-            pEvdev->rmlvo.layout, pEvdev->rmlvo.variant,
-            pEvdev->rmlvo.options);
-    if (!XkbInitKeyboardDeviceStruct(device, &pEvdev->xkbnames,
-                &keySyms, modMap, NULL,
-                EvdevKbdCtrl))
-        return 0;
-
-    return 1;
-}
-#endif
 
 static void
 EvdevKbdCtrl(DeviceIntPtr device, KeybdCtrl *ctrl)
@@ -1616,72 +1544,225 @@ EvdevAddKeyClass(DeviceIntPtr device)
     if (!pEvdev->rmlvo.options)
         SetXkbOption(pInfo, "XkbOptions", &pEvdev->rmlvo.options);
 
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 5
     if (!InitKeyboardDeviceStruct(device, &pEvdev->rmlvo, NULL, EvdevKbdCtrl))
         return !Success;
-#else
-    if (!EvdevInitKeysyms(device))
-        return !Success;
-
-#endif
 
     return Success;
 }
 
+#ifdef MULTITOUCH
+/* MT axes are counted twice - once as ABS_X (which the kernel keeps for
+ * backwards compatibility), once as ABS_MT_POSITION_X. So we need to keep a
+ * mapping of those axes to make sure we only count them once
+ */
+struct mt_axis_mappings {
+    int mt_code;
+    int code;
+    Bool needs_mapping; /* TRUE if both code and mt_code are present */
+    int mapping;        /* Logical mapping of 'code' axis */
+};
+
+static struct mt_axis_mappings mt_axis_mappings[] = {
+    {ABS_MT_POSITION_X, ABS_X},
+    {ABS_MT_POSITION_Y, ABS_Y},
+    {ABS_MT_PRESSURE, ABS_PRESSURE},
+    {ABS_MT_DISTANCE, ABS_DISTANCE},
+};
+#endif
+
+/**
+ * return TRUE if the axis is not one we should count as true axis
+ */
 static int
-EvdevAddAbsClass(DeviceIntPtr device)
+is_blacklisted_axis(int axis)
+{
+    switch(axis)
+    {
+        case ABS_MT_SLOT:
+        case ABS_MT_TRACKING_ID:
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
+
+static int
+EvdevAddAbsValuatorClass(DeviceIntPtr device)
 {
     InputInfoPtr pInfo;
     EvdevPtr pEvdev;
     int num_axes, axis, i = 0;
+    int num_mt_axes = 0, /* number of MT-only axes */
+        num_mt_axes_total = 0; /* total number of MT axes, including
+                                  double-counted ones, excluding blacklisted */
     Atom *atoms;
 
     pInfo = device->public.devicePrivate;
     pEvdev = pInfo->private;
 
-    if (!TestBit(EV_ABS, pEvdev->bitmask))
-            return !Success;
+    if (!EvdevBitIsSet(pEvdev->bitmask, EV_ABS))
+        goto out;
 
     num_axes = EvdevCountBits(pEvdev->abs_bitmask, NLONGS(ABS_MAX));
     if (num_axes < 1)
-        return !Success;
+        goto out;
 
-    if (num_axes > MAX_VALUATORS) {
-        xf86Msg(X_WARNING, "%s: found %d axes, limiting to %d.\n", device->name, num_axes, MAX_VALUATORS);
+#ifdef MULTITOUCH
+    for (axis = ABS_MT_SLOT; axis < ABS_MAX; axis++)
+    {
+        if (EvdevBitIsSet(pEvdev->abs_bitmask, axis))
+        {
+            int j;
+            Bool skip = FALSE;
+
+            for (j = 0; j < ArrayLength(mt_axis_mappings); j++)
+            {
+                if (mt_axis_mappings[j].mt_code == axis &&
+                    BitIsOn(pEvdev->abs_bitmask, mt_axis_mappings[j].code))
+                {
+                    mt_axis_mappings[j].needs_mapping = TRUE;
+                    skip = TRUE;
+                }
+            }
+
+            if (!is_blacklisted_axis(axis))
+            {
+                num_mt_axes_total++;
+                if (!skip)
+                    num_mt_axes++;
+            }
+            num_axes--;
+        }
+    }
+#endif
+    if (num_axes + num_mt_axes > MAX_VALUATORS) {
+        xf86IDrvMsg(pInfo, X_WARNING, "found %d axes, limiting to %d.\n", num_axes, MAX_VALUATORS);
         num_axes = MAX_VALUATORS;
     }
 
-    pEvdev->num_vals = num_axes;
-    memset(pEvdev->vals, 0, num_axes * sizeof(int));
-    memset(pEvdev->old_vals, -1, num_axes * sizeof(int));
-    atoms = malloc(pEvdev->num_vals * sizeof(Atom));
-
-    for (axis = ABS_X; i < MAX_VALUATORS && axis <= ABS_MAX; axis++) {
-        pEvdev->axis_map[axis] = -1;
-        if (!TestBit(axis, pEvdev->abs_bitmask))
-            continue;
-        pEvdev->axis_map[axis] = i;
-        i++;
-    }
-
-    EvdevInitAxesLabels(pEvdev, pEvdev->num_vals, atoms);
-
-    if (!InitValuatorClassDeviceStruct(device, num_axes,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 7
-                                       atoms,
-#endif
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 3
-                                       GetMotionHistory,
-#endif
-                                       GetMotionHistorySize(), Absolute)) {
-        xf86Msg(X_ERROR, "%s: failed to initialize valuator class device.\n",
+    if (num_axes < 1 && num_mt_axes_total < 1) {
+        xf86Msg(X_WARNING, "%s: no absolute or touch axes found.\n",
                 device->name);
         return !Success;
     }
 
-    for (axis = ABS_X; axis <= ABS_MAX; axis++) {
+    pEvdev->num_vals = num_axes;
+    if (num_axes > 0) {
+        pEvdev->vals = valuator_mask_new(num_axes);
+        pEvdev->old_vals = valuator_mask_new(num_axes);
+        if (!pEvdev->vals || !pEvdev->old_vals) {
+            xf86IDrvMsg(pInfo, X_ERROR, "failed to allocate valuator masks.\n");
+            goto out;
+        }
+    }
+#ifdef MULTITOUCH
+    if (num_mt_axes_total > 0) {
+        pEvdev->mt_mask = valuator_mask_new(num_mt_axes_total);
+        if (!pEvdev->mt_mask) {
+            xf86Msg(X_ERROR, "%s: failed to allocate MT valuator mask.\n",
+                    device->name);
+            goto out;
+        }
+
+        pEvdev->last_mt_vals = calloc(num_slots(pEvdev), sizeof(ValuatorMask *));
+        if (!pEvdev->last_mt_vals) {
+            xf86IDrvMsg(pInfo, X_ERROR,
+                        "%s: failed to allocate MT last values mask array.\n",
+                        device->name);
+            goto out;
+        }
+
+        for (i = 0; i < num_slots(pEvdev); i++) {
+            pEvdev->last_mt_vals[i] = valuator_mask_new(num_mt_axes_total);
+            if (!pEvdev->last_mt_vals[i]) {
+                xf86IDrvMsg(pInfo, X_ERROR,
+                            "%s: failed to allocate MT last values mask.\n",
+                            device->name);
+                goto out;
+            }
+        }
+
+        for (i = 0; i < EVDEV_MAXQUEUE; i++) {
+            pEvdev->queue[i].touchMask =
+                valuator_mask_new(num_mt_axes_total);
+            if (!pEvdev->queue[i].touchMask) {
+                xf86Msg(X_ERROR, "%s: failed to allocate MT valuator masks for "
+                        "evdev event queue.\n", device->name);
+                goto out;
+            }
+        }
+    }
+#endif
+    atoms = malloc((pEvdev->num_vals + num_mt_axes) * sizeof(Atom));
+
+    i = 0;
+    for (axis = ABS_X; i < MAX_VALUATORS && axis <= ABS_MAX; axis++) {
+        int j;
+        int mapping;
+        pEvdev->axis_map[axis] = -1;
+        if (!EvdevBitIsSet(pEvdev->abs_bitmask, axis) ||
+            is_blacklisted_axis(axis))
+            continue;
+
+        mapping = i;
+
+#ifdef MULTITOUCH
+        for (j = 0; j < ArrayLength(mt_axis_mappings); j++)
+        {
+            if (mt_axis_mappings[j].code == axis)
+                mt_axis_mappings[j].mapping = mapping;
+            else if (mt_axis_mappings[j].mt_code == axis &&
+                    mt_axis_mappings[j].needs_mapping)
+                mapping = mt_axis_mappings[j].mapping;
+        }
+#endif
+        pEvdev->axis_map[axis] = mapping;
+        if (mapping == i)
+            i++;
+    }
+
+    EvdevInitAxesLabels(pEvdev, Absolute, pEvdev->num_vals + num_mt_axes, atoms);
+
+    if (!InitValuatorClassDeviceStruct(device, num_axes + num_mt_axes, atoms,
+                                       GetMotionHistorySize(), Absolute)) {
+        xf86IDrvMsg(pInfo, X_ERROR, "failed to initialize valuator class device.\n");
+        goto out;
+    }
+
+#ifdef MULTITOUCH
+    if (num_mt_axes_total > 0)
+    {
+        int num_touches = 0;
+        int mode = pEvdev->flags & EVDEV_TOUCHPAD ?
+            XIDependentTouch : XIDirectTouch;
+
+        if (pEvdev->mtdev->caps.slot.maximum > 0)
+            num_touches = pEvdev->mtdev->caps.slot.maximum;
+
+        if (!InitTouchClassDeviceStruct(device, num_touches, mode,
+                                        num_mt_axes_total)) {
+            xf86Msg(X_ERROR, "%s: failed to initialize touch class device.\n",
+                    device->name);
+            goto out;
+        }
+
+        for (i = 0; i < num_slots(pEvdev); i++) {
+            for (axis = ABS_MT_TOUCH_MAJOR; axis < ABS_MAX; axis++) {
+                if (pEvdev->axis_map[axis] >= 0) {
+                    /* XXX: read initial values from mtdev when it adds support
+                     *      for doing so. */
+                    valuator_mask_set(pEvdev->last_mt_vals[i],
+                                      pEvdev->axis_map[axis], 0);
+                }
+            }
+        }
+    }
+#endif
+
+    for (axis = ABS_X; axis < ABS_MT_SLOT; axis++) {
         int axnum = pEvdev->axis_map[axis];
-        int resolution = 10000;
+        int resolution = 0;
 
         if (axnum == -1)
             continue;
@@ -1693,19 +1774,46 @@ EvdevAddAbsClass(DeviceIntPtr device)
 #endif
 
         xf86InitValuatorAxisStruct(device, axnum,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 7
                                    atoms[axnum],
-#endif
                                    pEvdev->absinfo[axis].minimum,
                                    pEvdev->absinfo[axis].maximum,
-                                   resolution, 0, resolution
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 12
-                                   , Absolute
-#endif
-                                   );
+                                   resolution, 0, resolution, Absolute);
         xf86InitValuatorDefaults(device, axnum);
-        pEvdev->old_vals[axnum] = -1;
     }
+
+#ifdef MULTITOUCH
+    for (axis = ABS_MT_TOUCH_MAJOR; axis <= ABS_MAX; axis++) {
+        int axnum = pEvdev->axis_map[axis];
+        int resolution = 0;
+        int j;
+        BOOL skip = FALSE;
+
+        if (axnum < 0)
+            continue;
+
+        for (j = 0; j < ArrayLength(mt_axis_mappings); j++)
+            if (mt_axis_mappings[j].mt_code == axis &&
+                    mt_axis_mappings[j].needs_mapping)
+            {
+                skip = TRUE;
+                break;
+            }
+
+        /* MT axis is mapped, don't set up twice */
+        if (skip)
+            continue;
+
+        if (pEvdev->absinfo[axis].resolution)
+            resolution = pEvdev->absinfo[axis].resolution * 1000;
+
+        xf86InitValuatorAxisStruct(device, axnum,
+                                   atoms[axnum],
+                                   pEvdev->absinfo[axis].minimum,
+                                   pEvdev->absinfo[axis].maximum,
+                                   resolution, 0, resolution,
+                                   Absolute);
+    }
+#endif
 
     free(atoms);
 
@@ -1714,17 +1822,23 @@ EvdevAddAbsClass(DeviceIntPtr device)
         if (!pEvdev->use_proximity)
             break;
 
-        if (TestBit(proximity_bits[i], pEvdev->key_bitmask))
+        if (EvdevBitIsSet(pEvdev->key_bitmask, proximity_bits[i]))
         {
             InitProximityClassDeviceStruct(device);
+            pEvdev->prox = valuator_mask_new(num_axes);
+            if (!pEvdev->prox) {
+                xf86IDrvMsg(pInfo, X_ERROR,
+                            "failed to allocate proximity valuator " "mask.\n");
+                goto out;
+            }
             break;
         }
     }
 
     if (!InitPtrFeedbackClassDeviceStruct(device, EvdevPtrCtrlProc)) {
-        xf86Msg(X_ERROR, "%s: failed to initialize pointer feedback class "
-                "device.\n", device->name);
-        return !Success;
+        xf86IDrvMsg(pInfo, X_ERROR,
+                    "failed to initialize pointer feedback class device.\n");
+        goto out;
     }
 
     if (pEvdev->flags & EVDEV_TOUCHPAD)
@@ -1741,15 +1855,19 @@ EvdevAddAbsClass(DeviceIntPtr device)
         else if (!strcasecmp("relative", mode))
             pEvdev->flags |= EVDEV_RELATIVE_MODE;
         else
-            xf86Msg(X_INFO, "%s: unknown mode, use default\n", pInfo->name);
+            xf86IDrvMsg(pInfo, X_INFO, "unknown mode, use default\n");
         free(mode);
     }
 
     return Success;
+
+out:
+    EvdevFreeMasks(pEvdev);
+    return !Success;
 }
 
 static int
-EvdevAddRelClass(DeviceIntPtr device)
+EvdevAddRelValuatorClass(DeviceIntPtr device)
 {
     InputInfoPtr pInfo;
     EvdevPtr pEvdev;
@@ -1759,65 +1877,66 @@ EvdevAddRelClass(DeviceIntPtr device)
     pInfo = device->public.devicePrivate;
     pEvdev = pInfo->private;
 
-    if (!TestBit(EV_REL, pEvdev->bitmask))
-        return !Success;
+    if (!EvdevBitIsSet(pEvdev->bitmask, EV_REL))
+        goto out;
 
     num_axes = EvdevCountBits(pEvdev->rel_bitmask, NLONGS(REL_MAX));
     if (num_axes < 1)
-        return !Success;
+        goto out;
 
+#ifndef HAVE_SMOOTH_SCROLLING
     /* Wheels are special, we post them as button events. So let's ignore them
      * in the axes list too */
-    if (TestBit(REL_WHEEL, pEvdev->rel_bitmask))
+    if (EvdevBitIsSet(pEvdev->rel_bitmask, REL_WHEEL))
         num_axes--;
-    if (TestBit(REL_HWHEEL, pEvdev->rel_bitmask))
+    if (EvdevBitIsSet(pEvdev->rel_bitmask, REL_HWHEEL))
         num_axes--;
-    if (TestBit(REL_DIAL, pEvdev->rel_bitmask))
+    if (EvdevBitIsSet(pEvdev->rel_bitmask, REL_DIAL))
         num_axes--;
 
     if (num_axes <= 0)
-        return !Success;
+        goto out;
+#endif
 
     if (num_axes > MAX_VALUATORS) {
-        xf86Msg(X_WARNING, "%s: found %d axes, limiting to %d.\n", device->name, num_axes, MAX_VALUATORS);
+        xf86IDrvMsg(pInfo, X_WARNING, "found %d axes, limiting to %d.\n", num_axes, MAX_VALUATORS);
         num_axes = MAX_VALUATORS;
     }
 
     pEvdev->num_vals = num_axes;
-    memset(pEvdev->vals, 0, num_axes * sizeof(int));
+    if (num_axes > 0) {
+        pEvdev->vals = valuator_mask_new(num_axes);
+        if (!pEvdev->vals)
+            goto out;
+    }
     atoms = malloc(pEvdev->num_vals * sizeof(Atom));
 
     for (axis = REL_X; i < MAX_VALUATORS && axis <= REL_MAX; axis++)
     {
         pEvdev->axis_map[axis] = -1;
+#ifndef HAVE_SMOOTH_SCROLLING
         /* We don't post wheel events, so ignore them here too */
         if (axis == REL_WHEEL || axis == REL_HWHEEL || axis == REL_DIAL)
             continue;
-        if (!TestBit(axis, pEvdev->rel_bitmask))
+#endif
+        if (!EvdevBitIsSet(pEvdev->rel_bitmask, axis))
             continue;
         pEvdev->axis_map[axis] = i;
         i++;
     }
 
-    EvdevInitAxesLabels(pEvdev, pEvdev->num_vals, atoms);
+    EvdevInitAxesLabels(pEvdev, Relative, pEvdev->num_vals, atoms);
 
-    if (!InitValuatorClassDeviceStruct(device, num_axes,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 7
-                                       atoms,
-#endif
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 3
-                                       GetMotionHistory,
-#endif
+    if (!InitValuatorClassDeviceStruct(device, num_axes, atoms,
                                        GetMotionHistorySize(), Relative)) {
-        xf86Msg(X_ERROR, "%s: failed to initialize valuator class device.\n",
-                device->name);
-        return !Success;
+        xf86IDrvMsg(pInfo, X_ERROR, "failed to initialize valuator class device.\n");
+        goto out;
     }
 
     if (!InitPtrFeedbackClassDeviceStruct(device, EvdevPtrCtrlProc)) {
-        xf86Msg(X_ERROR, "%s: failed to initialize pointer feedback class "
-                "device.\n", device->name);
-        return !Success;
+        xf86IDrvMsg(pInfo, X_ERROR, "failed to initialize pointer feedback class "
+                "device.\n");
+        goto out;
     }
 
     for (axis = REL_X; axis <= REL_MAX; axis++)
@@ -1826,21 +1945,26 @@ EvdevAddRelClass(DeviceIntPtr device)
 
         if (axnum == -1)
             continue;
-        xf86InitValuatorAxisStruct(device, axnum,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 7
-                atoms[axnum],
-#endif
-                -1, -1, 1, 0, 1
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 12
-                                   , Relative
-#endif
-                );
+        xf86InitValuatorAxisStruct(device, axnum, atoms[axnum], -1, -1, 1, 0, 1,
+                                   Relative);
         xf86InitValuatorDefaults(device, axnum);
+#ifdef HAVE_SMOOTH_SCROLLING
+        if (axis == REL_WHEEL)
+            SetScrollValuator(device, axnum, SCROLL_TYPE_VERTICAL, -1.0, SCROLL_FLAG_PREFERRED);
+        else if (axis == REL_DIAL)
+            SetScrollValuator(device, axnum, SCROLL_TYPE_VERTICAL, -1.0, SCROLL_FLAG_NONE);
+        else if (axis == REL_HWHEEL)
+            SetScrollValuator(device, axnum, SCROLL_TYPE_HORIZONTAL, -1.0, SCROLL_FLAG_NONE);
+#endif
     }
 
     free(atoms);
 
     return Success;
+
+out:
+    valuator_mask_free(&pEvdev->vals);
+    return !Success;
 }
 
 static int
@@ -1856,10 +1980,7 @@ EvdevAddButtonClass(DeviceIntPtr device)
     labels = malloc(pEvdev->num_buttons * sizeof(Atom));
     EvdevInitButtonLabels(pEvdev, pEvdev->num_buttons, labels);
 
-    if (!InitButtonClassDeviceStruct(device, pEvdev->num_buttons,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 7
-                                     labels,
-#endif
+    if (!InitButtonClassDeviceStruct(device, pEvdev->num_buttons, labels,
                                      pEvdev->btnmap))
         return !Success;
 
@@ -1894,7 +2015,7 @@ EvdevInitButtonMapping(InputInfoPtr pInfo)
         char    *map, *s = " ";
         int     btn = 0;
 
-        xf86Msg(X_CONFIG, "%s: ButtonMapping '%s'\n", pInfo->name, mapping);
+        xf86IDrvMsg(pInfo, X_CONFIG, "ButtonMapping '%s'\n", mapping);
         map = mapping;
         while (s && *s != '\0' && nbuttons < EVDEV_MAXBUTTONS)
         {
@@ -1902,9 +2023,8 @@ EvdevInitButtonMapping(InputInfoPtr pInfo)
 
             if (s == map || btn < 0 || btn > EVDEV_MAXBUTTONS)
             {
-                xf86Msg(X_ERROR,
-                        "%s: ... Invalid button mapping. Using defaults\n",
-                        pInfo->name);
+                xf86IDrvMsg(pInfo, X_ERROR,
+                            "... Invalid button mapping. Using defaults\n");
                 nbuttons = 1; /* ensure defaults start at 1 */
                 break;
             }
@@ -1921,72 +2041,68 @@ EvdevInitButtonMapping(InputInfoPtr pInfo)
 }
 
 static void
-EvdevInitAnyClass(DeviceIntPtr device, EvdevPtr pEvdev)
+EvdevInitAnyValuators(DeviceIntPtr device, EvdevPtr pEvdev)
 {
+    InputInfoPtr pInfo = device->public.devicePrivate;
+
     if (pEvdev->flags & EVDEV_RELATIVE_EVENTS &&
-        EvdevAddRelClass(device) == Success)
-        xf86Msg(X_INFO, "%s: initialized for relative axes.\n", device->name);
+        EvdevAddRelValuatorClass(device) == Success)
+        xf86IDrvMsg(pInfo, X_INFO, "initialized for relative axes.\n");
     if (pEvdev->flags & EVDEV_ABSOLUTE_EVENTS &&
-        EvdevAddAbsClass(device) == Success)
-        xf86Msg(X_INFO, "%s: initialized for absolute axes.\n", device->name);
+        EvdevAddAbsValuatorClass(device) == Success)
+        xf86IDrvMsg(pInfo, X_INFO, "initialized for absolute axes.\n");
 }
 
 static void
-EvdevInitAbsClass(DeviceIntPtr device, EvdevPtr pEvdev)
+EvdevInitAbsValuators(DeviceIntPtr device, EvdevPtr pEvdev)
 {
-    if (EvdevAddAbsClass(device) == Success) {
+    InputInfoPtr pInfo = device->public.devicePrivate;
 
-        xf86Msg(X_INFO,"%s: initialized for absolute axes.\n", device->name);
-
+    if (EvdevAddAbsValuatorClass(device) == Success) {
+        xf86IDrvMsg(pInfo, X_INFO,"initialized for absolute axes.\n");
     } else {
-
-        xf86Msg(X_ERROR,"%s: failed to initialize for absolute axes.\n",
-                device->name);
-
+        xf86IDrvMsg(pInfo, X_ERROR,"failed to initialize for absolute axes.\n");
         pEvdev->flags &= ~EVDEV_ABSOLUTE_EVENTS;
-
     }
 }
 
 static void
-EvdevInitRelClass(DeviceIntPtr device, EvdevPtr pEvdev)
+EvdevInitRelValuators(DeviceIntPtr device, EvdevPtr pEvdev)
 {
+    InputInfoPtr pInfo = device->public.devicePrivate;
     int has_abs_axes = pEvdev->flags & EVDEV_ABSOLUTE_EVENTS;
 
-    if (EvdevAddRelClass(device) == Success) {
+    if (EvdevAddRelValuatorClass(device) == Success) {
 
-        xf86Msg(X_INFO,"%s: initialized for relative axes.\n", device->name);
+        xf86IDrvMsg(pInfo, X_INFO,"initialized for relative axes.\n");
 
         if (has_abs_axes) {
-
-            xf86Msg(X_WARNING,"%s: ignoring absolute axes.\n", device->name);
+            xf86IDrvMsg(pInfo, X_WARNING,"ignoring absolute axes.\n");
             pEvdev->flags &= ~EVDEV_ABSOLUTE_EVENTS;
         }
 
     } else {
-
-        xf86Msg(X_ERROR,"%s: failed to initialize for relative axes.\n",
-                device->name);
+        xf86IDrvMsg(pInfo, X_ERROR,"failed to initialize for relative axes.\n");
 
         pEvdev->flags &= ~EVDEV_RELATIVE_EVENTS;
 
         if (has_abs_axes)
-            EvdevInitAbsClass(device, pEvdev);
+            EvdevInitAbsValuators(device, pEvdev);
     }
 }
 
 static void
 EvdevInitTouchDevice(DeviceIntPtr device, EvdevPtr pEvdev)
 {
+    InputInfoPtr pInfo = device->public.devicePrivate;
+
     if (pEvdev->flags & EVDEV_RELATIVE_EVENTS) {
-
-        xf86Msg(X_WARNING,"%s: touchpads, tablets and touchscreens ignore "
-                "relative axes.\n", device->name);
-
+        xf86IDrvMsg(pInfo, X_WARNING, "touchpads, tablets and touchscreens "
+                    "ignore relative axes.\n");
         pEvdev->flags &= ~EVDEV_RELATIVE_EVENTS;
     }
 
-    EvdevInitAbsClass(device, pEvdev);
+    EvdevInitAbsValuators(device, pEvdev);
 }
 
 static int
@@ -2023,24 +2139,24 @@ EvdevInit(DeviceIntPtr device)
      */
 
     if (pEvdev->flags & (EVDEV_UNIGNORE_RELATIVE | EVDEV_UNIGNORE_ABSOLUTE))
-        EvdevInitAnyClass(device, pEvdev);
+        EvdevInitAnyValuators(device, pEvdev);
     else if (pEvdev->flags & (EVDEV_TOUCHPAD | EVDEV_TOUCHSCREEN | EVDEV_TABLET))
         EvdevInitTouchDevice(device, pEvdev);
     else if (pEvdev->flags & EVDEV_RELATIVE_EVENTS)
-        EvdevInitRelClass(device, pEvdev);
+        EvdevInitRelValuators(device, pEvdev);
     else if (pEvdev->flags & EVDEV_ABSOLUTE_EVENTS)
-        EvdevInitAbsClass(device, pEvdev);
+        EvdevInitAbsValuators(device, pEvdev);
 
-#ifdef HAVE_PROPERTIES
     /* We drop the return value, the only time we ever want the handlers to
      * unregister is when the device dies. In which case we don't have to
      * unregister anyway */
     EvdevInitProperty(device);
     XIRegisterPropertyHandler(device, EvdevSetProperty, NULL, NULL);
     EvdevMBEmuInitProperty(device);
+    Evdev3BEmuInitProperty(device);
     EvdevWheelEmuInitProperty(device);
     EvdevDragLockInitProperty(device);
-#endif
+    EvdevAppleInitProperty(device);
 
     return Success;
 }
@@ -2068,6 +2184,7 @@ EvdevOn(DeviceIntPtr device)
     xf86AddEnabledDevice(pInfo);
     EvdevMBEmuOn(pInfo);
     AhmRegisterTimers(pInfo);
+    Evdev3BEmuOn(pInfo);
     pEvdev->flags |= EVDEV_INITIALIZED;
     device->public.on = TRUE;
 
@@ -2095,6 +2212,7 @@ EvdevProc(DeviceIntPtr device, int what)
     case DEVICE_OFF:
       if (pEvdev->flags & EVDEV_INITIALIZED){
 	EvdevMBEmuFinalize(pInfo);
+	Evdev3BEmuFinalize(pInfo);
 	AhmFinalise(pInfo);
       }
         if (pInfo->fd != -1)
@@ -2110,14 +2228,18 @@ EvdevProc(DeviceIntPtr device, int what)
 	break;
 
     case DEVICE_CLOSE:
-	xf86Msg(X_INFO, "%s: Close\n", pInfo->name);
+	xf86IDrvMsg(pInfo, X_INFO, "Close\n");
         if (pInfo->fd != -1) {
             close(pInfo->fd);
             pInfo->fd = -1;
         }
+        EvdevFreeMasks(pEvdev);
         EvdevRemoveDevice(pInfo);
         pEvdev->min_maj = 0;
 	break;
+
+    default:
+        return BadValue;
     }
 
     return Success;
@@ -2133,6 +2255,7 @@ EvdevCache(InputInfoPtr pInfo)
 {
     EvdevPtr pEvdev = pInfo->private;
     int i, len;
+    struct input_id id;
 
     char name[1024]                  = {0};
     unsigned long bitmask[NLONGS(EV_CNT)]      = {0};
@@ -2141,8 +2264,18 @@ EvdevCache(InputInfoPtr pInfo)
     unsigned long abs_bitmask[NLONGS(ABS_CNT)] = {0};
     unsigned long led_bitmask[NLONGS(LED_CNT)] = {0};
 
+
+    if (ioctl(pInfo->fd, EVIOCGID, &id) < 0)
+    {
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGID failed: %s\n", strerror(errno));
+        goto error;
+    }
+
+    pEvdev->id_vendor = id.vendor;
+    pEvdev->id_product = id.product;
+
     if (ioctl(pInfo->fd, EVIOCGNAME(sizeof(name) - 1), name) < 0) {
-        xf86Msg(X_ERROR, "ioctl EVIOCGNAME failed: %s\n", strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGNAME failed: %s\n", strerror(errno));
         goto error;
     }
 
@@ -2150,8 +2283,8 @@ EvdevCache(InputInfoPtr pInfo)
 
     len = ioctl(pInfo->fd, EVIOCGBIT(0, sizeof(bitmask)), bitmask);
     if (len < 0) {
-        xf86Msg(X_ERROR, "%s: ioctl EVIOCGBIT failed: %s\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGBIT failed: %s\n",
+                    strerror(errno));
         goto error;
     }
 
@@ -2159,8 +2292,8 @@ EvdevCache(InputInfoPtr pInfo)
 
     len = ioctl(pInfo->fd, EVIOCGBIT(EV_REL, sizeof(rel_bitmask)), rel_bitmask);
     if (len < 0) {
-        xf86Msg(X_ERROR, "%s: ioctl EVIOCGBIT failed: %s\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGBIT failed: %s\n",
+                    strerror(errno));
         goto error;
     }
 
@@ -2168,8 +2301,8 @@ EvdevCache(InputInfoPtr pInfo)
 
     len = ioctl(pInfo->fd, EVIOCGBIT(EV_ABS, sizeof(abs_bitmask)), abs_bitmask);
     if (len < 0) {
-        xf86Msg(X_ERROR, "%s: ioctl EVIOCGBIT failed: %s\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGBIT failed: %s\n",
+                    strerror(errno));
         goto error;
     }
 
@@ -2177,8 +2310,8 @@ EvdevCache(InputInfoPtr pInfo)
 
     len = ioctl(pInfo->fd, EVIOCGBIT(EV_LED, sizeof(led_bitmask)), led_bitmask);
     if (len < 0) {
-        xf86Msg(X_ERROR, "%s: ioctl EVIOCGBIT failed: %s\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGBIT failed: %s\n",
+                    strerror(errno));
         goto error;
     }
 
@@ -2189,20 +2322,22 @@ EvdevCache(InputInfoPtr pInfo)
      * to be static, always refresh it in evdev structure.
      */
     for (i = ABS_X; i <= ABS_MAX; i++) {
-        if (TestBit(i, abs_bitmask)) {
+        if (EvdevBitIsSet(abs_bitmask, i)) {
             len = ioctl(pInfo->fd, EVIOCGABS(i), &pEvdev->absinfo[i]);
             if (len < 0) {
-                xf86Msg(X_ERROR, "%s: ioctl EVIOCGABSi(%d) failed: %s\n",
-                        pInfo->name, i, strerror(errno));
+                xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGABSi(%d) failed: %s\n",
+                            i, strerror(errno));
                 goto error;
             }
+            xf86IDrvMsgVerb(pInfo, X_PROBED, 6, "absolute axis %#x [%d..%d]\n",
+                            i, pEvdev->absinfo[i].maximum, pEvdev->absinfo[i].minimum);
         }
     }
 
     len = ioctl(pInfo->fd, EVIOCGBIT(EV_KEY, sizeof(key_bitmask)), key_bitmask);
     if (len < 0) {
-        xf86Msg(X_ERROR, "%s: ioctl EVIOCGBIT failed: %s\n",
-                pInfo->name, strerror(errno));
+        xf86IDrvMsg(pInfo, X_ERROR, "ioctl EVIOCGBIT failed: %s\n",
+                    strerror(errno));
         goto error;
     }
 
@@ -2230,15 +2365,47 @@ EvdevGrabDevice(InputInfoPtr pInfo, int grab, int ungrab)
     if (pEvdev->grabDevice)
     {
         if (grab && ioctl(pInfo->fd, EVIOCGRAB, (void *)1)) {
-            xf86Msg(X_WARNING, "%s: Grab failed (%s)\n", pInfo->name,
-                    strerror(errno));
+            xf86IDrvMsg(pInfo, X_WARNING, "Grab failed (%s)\n",
+                        strerror(errno));
             return FALSE;
         } else if (ungrab && ioctl(pInfo->fd, EVIOCGRAB, (void *)0))
-            xf86Msg(X_WARNING, "%s: Release failed (%s)\n", pInfo->name,
-                    strerror(errno));
+            xf86IDrvMsg(pInfo, X_WARNING, "Release failed (%s)\n",
+                        strerror(errno));
     }
 
     return TRUE;
+}
+
+/**
+ * Some devices only have other axes (e.g. wheels), but we
+ * still need x/y for these. The server relies on devices having
+ * x/y as axes 0/1 and core/XI 1.x clients expect it too (#44655)
+ */
+static void
+EvdevForceXY(InputInfoPtr pInfo, int mode)
+{
+    EvdevPtr pEvdev = pInfo->private;
+
+    xf86IDrvMsg(pInfo, X_INFO, "Forcing %s x/y axes to exist.\n",
+                (mode == Relative) ? "relative" : "absolute");
+
+    if (mode == Relative)
+    {
+        EvdevSetBit(pEvdev->rel_bitmask, REL_X);
+        EvdevSetBit(pEvdev->rel_bitmask, REL_Y);
+    } else if (mode == Absolute)
+    {
+        EvdevSetBit(pEvdev->abs_bitmask, ABS_X);
+        EvdevSetBit(pEvdev->abs_bitmask, ABS_Y);
+        pEvdev->absinfo[ABS_X].minimum = 0;
+        pEvdev->absinfo[ABS_X].maximum = 1000;
+        pEvdev->absinfo[ABS_X].value = 0;
+        pEvdev->absinfo[ABS_X].resolution = 0;
+        pEvdev->absinfo[ABS_Y].minimum = 0;
+        pEvdev->absinfo[ABS_Y].maximum = 1000;
+        pEvdev->absinfo[ABS_Y].value = 0;
+        pEvdev->absinfo[ABS_Y].resolution = 0;
+    }
 }
 
 static int
@@ -2246,9 +2413,13 @@ EvdevProbe(InputInfoPtr pInfo)
 {
     int i, has_rel_axes, has_abs_axes, has_keys, num_buttons, has_scroll;
     int has_lmr; /* left middle right */
+    int has_mt; /* multitouch */
     int ignore_abs = 0, ignore_rel = 0;
     EvdevPtr pEvdev = pInfo->private;
     int rc = 1;
+
+    xf86IDrvMsg(pInfo, X_PROBED, "Vendor %#hx Product %#hx\n",
+                pEvdev->id_vendor, pEvdev->id_product);
 
     /* Trinary state for ignoring axes:
        - unset: do the normal thing.
@@ -2276,13 +2447,14 @@ EvdevProbe(InputInfoPtr pInfo)
     has_keys = FALSE;
     has_scroll = FALSE;
     has_lmr = FALSE;
+    has_mt = FALSE;
     num_buttons = 0;
 
     /* count all buttons */
     for (i = BTN_MISC; i < BTN_JOYSTICK; i++)
     {
         int mapping = 0;
-        if (TestBit(i, pEvdev->key_bitmask))
+        if (EvdevBitIsSet(pEvdev->key_bitmask, i))
         {
             mapping = EvdevUtilButtonEventToButtonNumber(pEvdev, i);
             if (mapping > num_buttons)
@@ -2290,100 +2462,127 @@ EvdevProbe(InputInfoPtr pInfo)
         }
     }
 
-    has_lmr = TestBit(BTN_LEFT, pEvdev->key_bitmask) ||
-                TestBit(BTN_MIDDLE, pEvdev->key_bitmask) ||
-                TestBit(BTN_RIGHT, pEvdev->key_bitmask);
+    has_lmr = EvdevBitIsSet(pEvdev->key_bitmask, BTN_LEFT) ||
+                EvdevBitIsSet(pEvdev->key_bitmask, BTN_MIDDLE) ||
+                EvdevBitIsSet(pEvdev->key_bitmask, BTN_RIGHT);
 
     if (num_buttons)
     {
         pEvdev->flags |= EVDEV_BUTTON_EVENTS;
         pEvdev->num_buttons = num_buttons;
-        xf86Msg(X_PROBED, "%s: Found %d mouse buttons\n", pInfo->name,
-                num_buttons);
+        xf86IDrvMsg(pInfo, X_PROBED, "Found %d mouse buttons\n", num_buttons);
     }
 
     for (i = 0; i < REL_MAX; i++) {
-        if (TestBit(i, pEvdev->rel_bitmask)) {
+        if (EvdevBitIsSet(pEvdev->rel_bitmask, i)) {
             has_rel_axes = TRUE;
             break;
         }
     }
 
     if (has_rel_axes) {
-        if (TestBit(REL_WHEEL, pEvdev->rel_bitmask) ||
-            TestBit(REL_HWHEEL, pEvdev->rel_bitmask) ||
-            TestBit(REL_DIAL, pEvdev->rel_bitmask)) {
-            xf86Msg(X_PROBED, "%s: Found scroll wheel(s)\n", pInfo->name);
+        if (EvdevBitIsSet(pEvdev->rel_bitmask, REL_WHEEL) ||
+            EvdevBitIsSet(pEvdev->rel_bitmask, REL_HWHEEL) ||
+            EvdevBitIsSet(pEvdev->rel_bitmask, REL_DIAL)) {
+            xf86IDrvMsg(pInfo, X_PROBED, "Found scroll wheel(s)\n");
             has_scroll = TRUE;
             if (!num_buttons)
-                xf86Msg(X_INFO, "%s: Forcing buttons for scroll wheel(s)\n",
-                        pInfo->name);
+                xf86IDrvMsg(pInfo, X_INFO,
+                            "Forcing buttons for scroll wheel(s)\n");
             num_buttons = (num_buttons < 3) ? 7 : num_buttons + 4;
             pEvdev->num_buttons = num_buttons;
         }
 
         if (!ignore_rel)
         {
-            xf86Msg(X_PROBED, "%s: Found relative axes\n", pInfo->name);
+            xf86IDrvMsg(pInfo, X_PROBED, "Found relative axes\n");
             pEvdev->flags |= EVDEV_RELATIVE_EVENTS;
 
-            if (TestBit(REL_X, pEvdev->rel_bitmask) &&
-                TestBit(REL_Y, pEvdev->rel_bitmask)) {
-                xf86Msg(X_PROBED, "%s: Found x and y relative axes\n", pInfo->name);
-            }
+            if (EvdevBitIsSet(pEvdev->rel_bitmask, REL_X) &&
+                EvdevBitIsSet(pEvdev->rel_bitmask, REL_Y)) {
+                xf86IDrvMsg(pInfo, X_PROBED, "Found x and y relative axes\n");
+            } else if (!EvdevBitIsSet(pEvdev->abs_bitmask, ABS_X) ||
+                       !EvdevBitIsSet(pEvdev->abs_bitmask, ABS_Y))
+                EvdevForceXY(pInfo, Relative);
         } else {
-            xf86Msg(X_INFO, "%s: Relative axes present but ignored.\n", pInfo->name);
+            xf86IDrvMsg(pInfo, X_INFO, "Relative axes present but ignored.\n");
             has_rel_axes = FALSE;
         }
     }
 
     for (i = 0; i < ABS_MAX; i++) {
-        if (TestBit(i, pEvdev->abs_bitmask)) {
+        if (EvdevBitIsSet(pEvdev->abs_bitmask, i)) {
             has_abs_axes = TRUE;
             break;
         }
     }
 
+#ifdef MULTITOUCH
+    for (i = ABS_MT_SLOT; i < ABS_MAX; i++) {
+        if (EvdevBitIsSet(pEvdev->abs_bitmask, i)) {
+            has_mt = TRUE;
+            break;
+        }
+    }
+#endif
+
     if (ignore_abs && has_abs_axes)
     {
-        xf86Msg(X_INFO, "%s: Absolute axes present but ignored.\n", pInfo->name);
+        xf86IDrvMsg(pInfo, X_INFO, "Absolute axes present but ignored.\n");
         has_abs_axes = FALSE;
     } else if (has_abs_axes) {
-        xf86Msg(X_PROBED, "%s: Found absolute axes\n", pInfo->name);
+        xf86IDrvMsg(pInfo, X_PROBED, "Found absolute axes\n");
         pEvdev->flags |= EVDEV_ABSOLUTE_EVENTS;
 
-        if ((TestBit(ABS_X, pEvdev->abs_bitmask) &&
-             TestBit(ABS_Y, pEvdev->abs_bitmask))) {
-            xf86Msg(X_PROBED, "%s: Found x and y absolute axes\n", pInfo->name);
-            if (TestBit(BTN_TOOL_PEN, pEvdev->key_bitmask) ||
-                TestBit(BTN_STYLUS, pEvdev->key_bitmask) ||
-                TestBit(BTN_STYLUS2, pEvdev->key_bitmask))
+        if (has_mt)
+            xf86IDrvMsg(pInfo, X_PROBED, "Found absolute multitouch axes\n");
+
+        if ((EvdevBitIsSet(pEvdev->abs_bitmask, ABS_X) &&
+             EvdevBitIsSet(pEvdev->abs_bitmask, ABS_Y))) {
+            xf86IDrvMsg(pInfo, X_PROBED, "Found x and y absolute axes\n");
+            if (EvdevBitIsSet(pEvdev->key_bitmask, BTN_TOOL_PEN) ||
+                EvdevBitIsSet(pEvdev->key_bitmask, BTN_STYLUS) ||
+                EvdevBitIsSet(pEvdev->key_bitmask, BTN_STYLUS2))
             {
-                xf86Msg(X_PROBED, "%s: Found absolute tablet.\n", pInfo->name);
+                xf86IDrvMsg(pInfo, X_PROBED, "Found absolute tablet.\n");
                 pEvdev->flags |= EVDEV_TABLET;
                 if (!pEvdev->num_buttons)
                 {
                     pEvdev->num_buttons = 7; /* LMR + scroll wheels */
                     pEvdev->flags |= EVDEV_BUTTON_EVENTS;
                 }
-            } else if (TestBit(ABS_PRESSURE, pEvdev->abs_bitmask) ||
-                TestBit(BTN_TOUCH, pEvdev->key_bitmask)) {
-                if (has_lmr || TestBit(BTN_TOOL_FINGER, pEvdev->key_bitmask)) {
-                    xf86Msg(X_PROBED, "%s: Found absolute touchpad.\n", pInfo->name);
+            } else if (EvdevBitIsSet(pEvdev->abs_bitmask, ABS_PRESSURE) ||
+                EvdevBitIsSet(pEvdev->key_bitmask, BTN_TOUCH)) {
+                if (has_lmr || EvdevBitIsSet(pEvdev->key_bitmask, BTN_TOOL_FINGER)) {
+                    xf86IDrvMsg(pInfo, X_PROBED, "Found absolute touchpad.\n");
                     pEvdev->flags |= EVDEV_TOUCHPAD;
-                    memset(pEvdev->old_vals, -1, sizeof(int) * pEvdev->num_vals);
                 } else {
-                    xf86Msg(X_PROBED, "%s: Found absolute touchscreen\n", pInfo->name);
+                    xf86IDrvMsg(pInfo, X_PROBED, "Found absolute touchscreen\n");
                     pEvdev->flags |= EVDEV_TOUCHSCREEN;
                     pEvdev->flags |= EVDEV_BUTTON_EVENTS;
                 }
+            } else if (!(EvdevBitIsSet(pEvdev->rel_bitmask, REL_X) &&
+                         EvdevBitIsSet(pEvdev->rel_bitmask, REL_Y)) && has_lmr) {
+                    /* some touchscreens use BTN_LEFT rather than BTN_TOUCH */
+                    xf86IDrvMsg(pInfo, X_PROBED, "Found absolute touchscreen\n");
+                    pEvdev->flags |= EVDEV_TOUCHSCREEN;
+                    pEvdev->flags |= EVDEV_BUTTON_EVENTS;
             }
+        } else {
+#ifdef MULTITOUCH
+            if (!EvdevBitIsSet(pEvdev->abs_bitmask, ABS_MT_POSITION_X) ||
+                !EvdevBitIsSet(pEvdev->abs_bitmask, ABS_MT_POSITION_Y))
+#endif
+                EvdevForceXY(pInfo, Absolute);
         }
+
+
+
     }
 
     for (i = 0; i < BTN_MISC; i++) {
-        if (TestBit(i, pEvdev->key_bitmask)) {
-            xf86Msg(X_PROBED, "%s: Found keys\n", pInfo->name);
+        if (EvdevBitIsSet(pEvdev->key_bitmask, i)) {
+            xf86IDrvMsg(pInfo, X_PROBED, "Found keys\n");
             pEvdev->flags |= EVDEV_KEYBOARD_EVENTS;
             has_keys = TRUE;
             break;
@@ -2408,26 +2607,26 @@ EvdevProbe(InputInfoPtr pInfo)
             if (num_calibration == 4)
                 EvdevSetCalibration(pInfo, num_calibration, calibration);
             else
-                xf86Msg(X_ERROR,
-                        "%s: Insufficient calibration factors (%d). Ignoring calibration\n",
-                        pInfo->name, num_calibration);
+                xf86IDrvMsg(pInfo, X_ERROR,
+                            "Insufficient calibration factors (%d). Ignoring calibration\n",
+                            num_calibration);
         }
     }
 
     if (has_rel_axes || has_abs_axes || num_buttons) {
         pInfo->flags |= XI86_SEND_DRAG_EVENTS;
 	if (pEvdev->flags & EVDEV_TOUCHPAD) {
-	    xf86Msg(X_INFO, "%s: Configuring as touchpad\n", pInfo->name);
+	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as touchpad\n");
 	    pInfo->type_name = XI_TOUCHPAD;
 	    pEvdev->use_proximity = 0;
 	} else if (pEvdev->flags & EVDEV_TABLET) {
-	    xf86Msg(X_INFO, "%s: Configuring as tablet\n", pInfo->name);
+	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as tablet\n");
 	    pInfo->type_name = XI_TABLET;
         } else if (pEvdev->flags & EVDEV_TOUCHSCREEN) {
-            xf86Msg(X_INFO, "%s: Configuring as touchscreen\n", pInfo->name);
+            xf86IDrvMsg(pInfo, X_INFO, "Configuring as touchscreen\n");
             pInfo->type_name = XI_TOUCHSCREEN;
 	} else {
-	    xf86Msg(X_INFO, "%s: Configuring as mouse\n", pInfo->name);
+	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as mouse\n");
 	    pInfo->type_name = XI_MOUSE;
 	}
 
@@ -2435,7 +2634,7 @@ EvdevProbe(InputInfoPtr pInfo)
     }
 
     if (has_keys) {
-        xf86Msg(X_INFO, "%s: Configuring as keyboard\n", pInfo->name);
+        xf86IDrvMsg(pInfo, X_INFO, "Configuring as keyboard\n");
         pInfo->type_name = XI_KEYBOARD;
         rc = 0;
     }
@@ -2443,14 +2642,13 @@ EvdevProbe(InputInfoPtr pInfo)
     if (has_scroll &&
         (has_rel_axes || has_abs_axes || num_buttons || has_keys))
     {
-        xf86Msg(X_INFO, "%s: Adding scrollwheel support\n", pInfo->name);
+        xf86IDrvMsg(pInfo, X_INFO, "Adding scrollwheel support\n");
         pEvdev->flags |= EVDEV_BUTTON_EVENTS;
         pEvdev->flags |= EVDEV_RELATIVE_EVENTS;
     }
 
     if (rc)
-        xf86Msg(X_WARNING, "%s: Don't know how to use device\n",
-		pInfo->name);
+        xf86IDrvMsg(pInfo, X_WARNING, "Don't know how to use device\n");
 
     return rc;
 }
@@ -2479,18 +2677,18 @@ static int
 EvdevOpenDevice(InputInfoPtr pInfo)
 {
     EvdevPtr pEvdev = pInfo->private;
-    char *device = (char*)pEvdev->device;
+    char *device = pEvdev->device;
 
     if (!device)
     {
         device = xf86CheckStrOption(pInfo->options, "Device", NULL);
         if (!device) {
-            xf86Msg(X_ERROR, "%s: No device specified.\n", pInfo->name);
+            xf86IDrvMsg(pInfo, X_ERROR, "No device specified.\n");
             return BadValue;
         }
 
         pEvdev->device = device;
-        xf86Msg(X_CONFIG, "%s: Device: \"%s\"\n", pInfo->name, device);
+        xf86IDrvMsg(pInfo, X_CONFIG, "Device: \"%s\"\n", device);
     }
 
     if (pInfo->fd < 0)
@@ -2500,70 +2698,54 @@ EvdevOpenDevice(InputInfoPtr pInfo)
         } while (pInfo->fd < 0 && errno == EINTR);
 
         if (pInfo->fd < 0) {
-            xf86Msg(X_ERROR, "Unable to open evdev device \"%s\".\n", device);
+            xf86IDrvMsg(pInfo, X_ERROR, "Unable to open evdev device \"%s\".\n", device);
             return BadValue;
         }
     }
+
+#ifdef MULTITOUCH
+    pEvdev->mtdev = mtdev_new_open(pInfo->fd);
+    if (pEvdev->mtdev)
+        pEvdev->cur_slot = pEvdev->mtdev->caps.slot.value;
+    else {
+        xf86Msg(X_ERROR, "%s: Couldn't open mtdev device\n", pInfo->name);
+        return FALSE;
+    }
+#endif
 
     /* Check major/minor of device node to avoid adding duplicate devices. */
     pEvdev->min_maj = EvdevGetMajorMinor(pInfo);
     if (EvdevIsDuplicate(pInfo))
     {
-        xf86Msg(X_WARNING, "%s: device file is duplicate. Ignoring.\n",
-                pInfo->name);
+        xf86IDrvMsg(pInfo, X_WARNING, "device file is duplicate. Ignoring.\n");
         close(pInfo->fd);
+#ifdef MULTITOUCH
+        mtdev_close_delete(pEvdev->mtdev);
+        pEvdev->mtdev = NULL;
+#endif
         return BadMatch;
     }
 
     return Success;
 }
 
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 12
-static int NewEvdevPreInit(InputDriverPtr, InputInfoPtr, int);
-
-static InputInfoPtr
-EvdevPreInit(InputDriverPtr drv, IDevPtr dev, int flags)
+static void
+EvdevUnInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 {
-    InputInfoPtr pInfo;
-
-    if (!(pInfo = xf86AllocateInput(drv, 0)))
-	return NULL;
-
-    /* Initialise the InputInfoRec. */
-    pInfo->fd = -1;
-    pInfo->name = dev->identifier;
-    pInfo->flags = 0;
-    pInfo->history_size = 0;
-    pInfo->control_proc = NULL;
-    pInfo->close_proc = NULL;
-    pInfo->conversion_proc = NULL;
-    pInfo->reverse_conversion_proc = NULL;
-    pInfo->dev = NULL;
-    pInfo->private_flags = 0;
-    pInfo->always_core_feedback = NULL;
-    pInfo->conf_idev = dev;
-    pInfo->private = NULL;
-
-    xf86CollectInputOptions(pInfo, (const char**)evdevDefaults, NULL);
-    xf86ProcessCommonOptions(pInfo, pInfo->options);
-
-    if (NewEvdevPreInit(drv, pInfo, flags) == Success)
+    EvdevPtr pEvdev = pInfo ? pInfo->private : NULL;
+    if (pEvdev)
     {
-        pInfo->flags |= XI86_CONFIGURED;
-        return pInfo;
+        /* Release strings allocated in EvdevAddKeyClass. */
+        XkbFreeRMLVOSet(&pEvdev->rmlvo, FALSE);
+        /* Release string allocated in EvdevOpenDevice. */
+        free(pEvdev->device);
+        pEvdev->device = NULL;
     }
-
-
-    xf86DeleteInput(pInfo, 0);
-    return NULL;
+    xf86DeleteInput(pInfo, flags);
 }
 
 static int
-NewEvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
-#else
-static int
 EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
-#endif
 {
     EvdevPtr pEvdev;
     int rc = BadAlloc;
@@ -2580,6 +2762,10 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
     rc = EvdevOpenDevice(pInfo);
     if (rc != Success)
         goto error;
+
+#ifdef MULTITOUCH
+    pEvdev->cur_slot = -1;
+#endif
 
     /*
      * We initialize pEvdev->in_proximity to 1 so that device that doesn't use
@@ -2598,8 +2784,7 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
      * hold a grab. */
     if (!EvdevGrabDevice(pInfo, 1, 1))
     {
-        xf86Msg(X_WARNING, "%s: Device may already be configured.\n",
-                pInfo->name);
+        xf86IDrvMsg(pInfo, X_WARNING, "Device may already be configured.\n");
         rc = BadMatch;
         goto error;
     }
@@ -2616,6 +2801,7 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
     if (pEvdev->flags & EVDEV_BUTTON_EVENTS)
     {
         EvdevMBEmuPreInit(pInfo);
+        Evdev3BEmuPreInit(pInfo);
         EvdevWheelEmuPreInit(pInfo);
         EvdevDragLockPreInit(pInfo);
     }
@@ -2745,11 +2931,9 @@ _X_EXPORT InputDriverRec EVDEV = {
     "evdev",
     NULL,
     EvdevPreInit,
+    EvdevUnInit,
     NULL,
-    NULL,
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 12
     evdevDefaults
-#endif
 };
 
 static void
@@ -2824,8 +3008,6 @@ EvdevUtilButtonEventToButtonNumber(EvdevPtr pEvdev, int code)
     }
 }
 
-#ifdef HAVE_PROPERTIES
-#ifdef HAVE_LABELS
 /* Aligned with linux/input.h.
    Note that there are holes in the ABS_ range, these are simply replaced with
    MISC here */
@@ -2879,7 +3061,6 @@ static char* abs_labels[] = {
     AXIS_LABEL_PROP_ABS_MISC,           /* undefined */
     AXIS_LABEL_PROP_ABS_MISC,           /* undefined */
     AXIS_LABEL_PROP_ABS_MISC,           /* undefined */
-#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 10
     AXIS_LABEL_PROP_ABS_MT_TOUCH_MAJOR, /* 0x30 */
     AXIS_LABEL_PROP_ABS_MT_TOUCH_MINOR, /* 0x31 */
     AXIS_LABEL_PROP_ABS_MT_WIDTH_MAJOR, /* 0x32 */
@@ -2891,7 +3072,6 @@ static char* abs_labels[] = {
     AXIS_LABEL_PROP_ABS_MT_BLOB_ID,     /* 0x38 */
     AXIS_LABEL_PROP_ABS_MT_TRACKING_ID, /* 0x39 */
     AXIS_LABEL_PROP_ABS_MT_PRESSURE,    /* 0x3a */
-#endif
 };
 
 static char* rel_labels[] = {
@@ -2988,28 +3168,23 @@ static char* btn_labels[][16] = {
     }
 };
 
-#endif /* HAVE_LABELS */
-
-static void EvdevInitAxesLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
+static void EvdevInitAxesLabels(EvdevPtr pEvdev, int mode, int natoms, Atom *atoms)
 {
-#ifdef HAVE_LABELS
     Atom atom;
     int axis;
     char **labels;
     int labels_len = 0;
-    char *misc_label;
 
-    if (pEvdev->flags & EVDEV_ABSOLUTE_EVENTS)
+    if (mode == Absolute)
     {
         labels     = abs_labels;
         labels_len = ArrayLength(abs_labels);
-        misc_label = AXIS_LABEL_PROP_ABS_MISC;
-    } else if ((pEvdev->flags & EVDEV_RELATIVE_EVENTS))
+    } else if (mode == Relative)
     {
         labels     = rel_labels;
         labels_len = ArrayLength(rel_labels);
-        misc_label = AXIS_LABEL_PROP_REL_MISC;
-    }
+    } else
+        return;
 
     memset(atoms, 0, natoms * sizeof(Atom));
 
@@ -3025,12 +3200,10 @@ static void EvdevInitAxesLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
 
         atoms[pEvdev->axis_map[axis]] = atom;
     }
-#endif
 }
 
 static void EvdevInitButtonLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
 {
-#ifdef HAVE_LABELS
     Atom atom;
     int button, bmap;
 
@@ -3041,7 +3214,7 @@ static void EvdevInitButtonLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
 
     for (button = BTN_MISC; button < BTN_JOYSTICK; button++)
     {
-        if (TestBit(button, pEvdev->key_bitmask))
+        if (EvdevBitIsSet(pEvdev->key_bitmask, button))
         {
             int group = (button % 0x100)/16;
             int idx = button - ((button/16) * 16);
@@ -3068,7 +3241,6 @@ static void EvdevInitButtonLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
         atoms[5] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_HWHEEL_LEFT);
     if (natoms > 6)
         atoms[6] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_HWHEEL_RIGHT);
-#endif
 }
 
 static void
@@ -3077,10 +3249,49 @@ EvdevInitProperty(DeviceIntPtr dev)
     InputInfoPtr pInfo  = dev->public.devicePrivate;
     EvdevPtr     pEvdev = pInfo->private;
     int          rc;
-    BOOL         invert[2];
+    char         *device_node;
+
+    CARD32       product[2];
+
+    prop_product_id = MakeAtom(XI_PROP_PRODUCT_ID, strlen(XI_PROP_PRODUCT_ID), TRUE);
+    product[0] = pEvdev->id_vendor;
+    product[1] = pEvdev->id_product;
+    rc = XIChangeDeviceProperty(dev, prop_product_id, XA_INTEGER, 32,
+                                PropModeReplace, 2, product, FALSE);
+    if (rc != Success)
+        return;
+
+    XISetDevicePropertyDeletable(dev, prop_product_id, FALSE);
+
+    /* Device node property */
+    device_node = strdup(pEvdev->device);
+    prop_device = MakeAtom(XI_PROP_DEVICE_NODE,
+                           strlen(XI_PROP_DEVICE_NODE), TRUE);
+    rc = XIChangeDeviceProperty(dev, prop_device, XA_STRING, 8,
+                                PropModeReplace,
+                                strlen(device_node), device_node,
+                                FALSE);
+    free(device_node);
+
+    if (rc != Success)
+        return;
+
+    if (EvdevDeviceIsVirtual(pEvdev->device))
+    {
+        BOOL virtual = 1;
+        prop_virtual = MakeAtom(XI_PROP_VIRTUAL_DEVICE,
+                                strlen(XI_PROP_VIRTUAL_DEVICE), TRUE);
+        rc = XIChangeDeviceProperty(dev, prop_virtual, XA_INTEGER, 8,
+                                    PropModeReplace, 1, &virtual, FALSE);
+        XISetDevicePropertyDeletable(dev, prop_virtual, FALSE);
+    }
+
+
+    XISetDevicePropertyDeletable(dev, prop_device, FALSE);
 
     if (pEvdev->flags & (EVDEV_RELATIVE_EVENTS | EVDEV_ABSOLUTE_EVENTS))
     {
+        BOOL invert[2];
         invert[0] = pEvdev->invert_x;
         invert[1] = pEvdev->invert_y;
 
@@ -3127,12 +3338,22 @@ EvdevInitProperty(DeviceIntPtr dev)
 
         XISetDevicePropertyDeletable(dev, prop_swap, FALSE);
 
-#ifdef HAVE_LABELS
         /* Axis labelling */
         if ((pEvdev->num_vals > 0) && (prop_axis_label = XIGetKnownProperty(AXIS_LABEL_PROP)))
         {
+            int mode;
             Atom atoms[pEvdev->num_vals];
-            EvdevInitAxesLabels(pEvdev, pEvdev->num_vals, atoms);
+
+            if (pEvdev->flags & EVDEV_ABSOLUTE_EVENTS)
+                mode = Absolute;
+            else if (pEvdev->flags & EVDEV_RELATIVE_EVENTS)
+                mode = Relative;
+            else {
+                xf86IDrvMsg(pInfo, X_ERROR, "BUG: mode is neither absolute nor relative\n");
+                mode = Absolute;
+            }
+
+            EvdevInitAxesLabels(pEvdev, mode, pEvdev->num_vals, atoms);
             XIChangeDeviceProperty(dev, prop_axis_label, XA_ATOM, 32,
                                    PropModeReplace, pEvdev->num_vals, atoms, FALSE);
             XISetDevicePropertyDeletable(dev, prop_axis_label, FALSE);
@@ -3146,7 +3367,6 @@ EvdevInitProperty(DeviceIntPtr dev)
                                    PropModeReplace, pEvdev->num_buttons, atoms, FALSE);
             XISetDevicePropertyDeletable(dev, prop_btn_label, FALSE);
         }
-#endif /* HAVE_LABELS */
     }
 
 }
@@ -3186,9 +3406,10 @@ EvdevSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 
         if (!checkonly)
             pEvdev->swap_axes = *((BOOL*)val->data);
-    } else if (atom == prop_axis_label || atom == prop_btn_label)
-        return BadAccess; /* Axis/Button labels can't be changed */
+    } else if (atom == prop_axis_label || atom == prop_btn_label ||
+               atom == prop_product_id || atom == prop_device ||
+               atom == prop_virtual)
+        return BadAccess; /* Read-only properties */
 
     return Success;
 }
-#endif
