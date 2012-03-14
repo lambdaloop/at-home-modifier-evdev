@@ -457,6 +457,13 @@ Alternatives
 ============
 There're some alternative candidates of at-home-modifier.
 
+* Space2Ctrl
+  https://github.com/r0adrunner/Space2Ctrl
+
+  It's minimal, only supports "Space to Ctrl", and not configurable.
+  It has pros and cons over at-home-modifier, discussed at the
+  home page of at-home-modifer.
+
 * actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
 
