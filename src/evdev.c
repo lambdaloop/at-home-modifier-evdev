@@ -2852,34 +2852,34 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 	      break;
 	    }
 	    if (*end != ':'){
-	      xf86Msg(X_ERROR, "%s: TransMod : "
+	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
 		      "Dest keycode is lacking; colon expected: %s\n",
-		      pInfo->name, str);
+		      str);
 	      break;
 	    }
 	    end++;
 	    next = end;
 	    toCode = strtol(next, &end, 10);
 	    if(next == end){
-	      xf86Msg(X_ERROR, "%s: TransMod : "
+	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
 		      "Dest keycode is lacking: %s\n",
-		      pInfo->name, str);
+			  str);
 	    }
 	    next = end;
 	    /* xxx do range check, and store */
-	    xf86Msg(X_CONFIG, "%s: TransMod: %i -> %i\n",
-		    pInfo->name, fromCode, toCode);
+	    xf86IDrvMsg(pInfo, X_CONFIG, "TransMod: %i -> %i\n",
+			fromCode, toCode);
 	    if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
-	      xf86Msg(X_ERROR, "%s: TransMod : "
-		      "Keycode out of range: %i\n",
-		      pInfo->name, fromCode);
+	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+			  "Keycode out of range: %i\n",
+			  fromCode);
 	      continue;
 	    }
 	    /* dest keycode has to be <= 255, due to X limit. */
 	    if((toCode < MIN_KEYCODE) || (toCode > 255)){
-	      xf86Msg(X_ERROR, "%s: TransMod : "
-		      "Keycode out of range: %i\n",
-		      pInfo->name, toCode);
+	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+			  "Keycode out of range: %i\n",
+			  toCode);
 	      continue;
 	    }
 	    pEvdev->transModTable[fromCode] = toCode;
@@ -2902,13 +2902,13 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 
 	    /* do range check, and store */
 	    if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
-	      xf86Msg(X_ERROR, "%s: AhmDelay : "
-		      "Keycode out of range: %i\n",
-		      pInfo->name, fromCode);
+	      xf86IDrvMsg(pInfo, X_ERROR, "AhmDelay : "
+			  "Keycode out of range: %i\n",
+			  fromCode);
 	      continue;
 	    }
 	    if(pEvdev->transModTable[fromCode] == 0){
-	      xf86Msg(X_WARNING, "%s: warning: Delay key %i is not a transmod.\n", pInfo->name, fromCode);
+	      xf86IDrvMsg(pInfo, X_WARNING, "warning: Delay key %i is not a transmod.\n", fromCode);
 	    }
 	    pEvdev->ahmDelayTable[fromCode] = 1;
 	  }
