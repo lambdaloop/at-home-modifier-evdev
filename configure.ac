@@ -52,7 +52,11 @@ PKG_CHECK_MODULES(XI22, [inputproto >= 2.1.99.3] [xorg-server >= 1.11.99.901], H
 
 if test "x$HAVE_XI22" = xyes; then
         # Obtain compiler/linker options for mtdev
-        PKG_CHECK_MODULES(MTDEV, mtdev, HAVE_MTDEV="yes", HAVE_MTDEV="no")
+	AC_ARG_WITH([mtdev], AS_HELP_STRING([--without-mtdev], [Build without mtdev (default: test)]))
+
+	AS_IF([test "x$with_mtdev" != "xno"], [
+        	    PKG_CHECK_MODULES(MTDEV, mtdev, HAVE_MTDEV="yes", HAVE_MTDEV="no")
+        ])
 fi
 if test "x$HAVE_XI22" = xyes && test "x$HAVE_MTDEV" = xyes; then
         AC_DEFINE(MULTITOUCH, 1, [XI2.2 available])
