@@ -633,7 +633,7 @@ AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
  *
  * Simple sleeping doesn't work; it simply blocks.
  */
-static void AhmWakeupHandler(pointer data, __attribute__ ((unused)) int i,
+static void AhmWakeupHandler(pointer data, __attribute__ ((unused)) int ii,
 		      pointer __attribute__ ((unused)) LastSelectMask){
   InputInfoPtr pInfo = (InputInfoPtr) data;
   EvdevPtr  pEvdev = (EvdevPtr) pInfo->private;
