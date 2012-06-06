@@ -10,9 +10,9 @@ Contents
 * Get it
 * Usage
 * Author
-* Bugs, Wish list
+* Bugs
 * Random bits
-* History
+* History (News are here)
 * Source code
 * Copyright
 
@@ -22,7 +22,9 @@ It enables for example "shift/space dual role key." When you press the
 space key alone, it's a space; but when you press it with another key,
 it's a shift. Any pairs of keys are possible. It is a fork of evdev
 driver = xf86-input-evdev. It's ** only for Linux ** - X in other
-platforms don't use evdev driver.
+platforms don't use evdev driver. You can use "keydouble" referred
+below if you're not a Linux user. For MS Win users, there's
+AutoHotKey.
 
 With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
@@ -53,7 +55,7 @@ Get it
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.6.4.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.7.1.tar.gz
 
 You can also download the patch against the Xorg's original
 xf86-input-evdev from the website.
@@ -96,10 +98,11 @@ Usage
 =====
 First, know the keycodes you need, which are numbers assigned to each
 physical key. It's easiest to install and invoke "xev" commands. In my
-case it says space is 65, and left shift is 50. OK. Then write your
-xorg.conf or xorg.conf.d/10-keyboard.conf:
+case it says space is 65, and left shift is 50. OK. (See below for
+complicated cases.) Then write your xorg.conf or
+xorg.conf.d/10-keyboard.conf:
 
-  # For the detail see "man xorg.conf" or your distro doc.
+  # For the details see "man xorg.conf" or your distro doc.
   Section "InputClass"
     Identifier "my keyboard"
     Driver "evdev"
@@ -137,6 +140,8 @@ whitespaces, like this:
 
 Don't forget to restart X!
 
+Notice that the modifier keys should come to the second of pairs.
+
 Options recognized by at-home-modifier (in fact, by any X drivers)
 are printed to X log, typically /var/log/Xorg.0.log, like this:
 
@@ -149,23 +154,46 @@ try.
 
 *** Other keys ***
 
+Assume you want the left Alt to be Alt/Esc. Then assign Esc to that
+key, using xmodmap. If you don't have any other Alt keys, then allocate
+Alt to keycode 240 or so, which must be unused on usual keyboards.
+
+For more complicated changes, you can tamper with files in
+/usr/share/X11/xkb/symbols/. See also the section "More on keycodes"
+below.
+
 The bottom row of my keyboard is Esc-BS-Spc-Ret-Tab, from left to
 right, with the overlay Alt-Shift-Ctrl-Shift-Alt. (Japanese keyboards
-have many keys you can press with thumbs.) For that radical change,
-you need "xmodmap" command, or for more complicated changes, tamper
-with files in /usr/share/X11/xkb/symbols/. See also the section "More
-con keycodes" below.
+have many keys you can press with thumbs. Now you can switch Firefox tabs
+with thumbs.=)
 
 You can use any keys for transmods. "d" & "k" (and so on) may be good.
 When you want to capitalize the left-hand keys, press "k", and "d"
 for right-hands. This may sound too complex, but you'll be soon
 accustomed.
 
+*** Cancellation by long press (timeout) ***
+
+Suppose you were about to input shift + A and pressed space/shift, but
+you changed your mind. If you release the space/shift key, you'll
+receive one space, but it's not what you want!
+
+Actually, a workaround is provided by time-out; a long enough press
+cancels that kind of press. If you have the following line in evdev
+driver configuration,
+
+  Option "AhmTimeout" "400" # In millisecond.
+
+then a single press and release of space/shift key produces nothing if
+the press lasts more than 0.4 sec. The default is 0.6 sec. You can
+disable timeout by setting it to 0.
+
 *** Fast type fix (delay) ***
 
-Users of this hack often have "tongue-twister of fingers": Suppose you
-want " x". If the first press of space/shift is followed first by a
-press of x and then a release of space/shift, you'll get an upper-case X
+(Probably this option is not so satisfactory) Users of this hack often
+have "tongue-twister of fingers": Suppose you want a space and a lower
+case x. If the first press of space/shift is followed first by a press
+of x and then a release of space/shift, you'll get an upper-case X
 instead.
 
 To fix it, you can let "delay" be associated to space/shift, like:
@@ -178,24 +206,10 @@ and completes after release of space/shift or x.
 There's a trade off. Whenever you want a real shift, you have to
 release the space/shift later.
 
-Notice that *original* keycodes are expected in the configuration file,
-so in this example, specify it as 65 = space, not 50 = left shift.
-
-*** Cancellation by long press (timeout) ***
-
-Suppose you were about to input shift + A and pressed space/shift, but
-you changed your mind. If you release the space/shift key, you'll
-receive one space, but it's not what you want!
-
-Actually, a workaround is provided by time-out. A long enough press
-cancels that kind of press. If you have the following line in evdev
-driver configuration,
-
-  Option "AhmTimeout" "400" # In millisecond.
-
-then a single press and release of space/shift key produces nothing if
-the press lasts more than 0.4 sec. The default is 0.6 sec. You can disable
-timeout by setting it to 0.
+This feature is not (yet) satisfactory for the author. Maybe it
+should be treated as a modifier only if the key is pressed long
+enough (say 100ms), in addition to / instead of the press-release
+orders.
 
 *** Successive transmod tuning ***
 
@@ -222,7 +236,7 @@ Reset is implemented by sending release events to all translated
 modifiers, and clearing internal variables. The time measurement is
 not exact, and the maximal error is 1 sec. (Implementation note: It's
 because the sub-second field of timeval struct is ignored.) The exact
-time the reset is done is the first time you touch the keyboard.
+time things get reset is the first time you touch the keyboard.
 
 *** Gtk widget double-press workaround (padding interval) ***
 
@@ -236,13 +250,13 @@ As a workaround, "padding interval" can be set:
 The default value is 10 ms, and I think it's good, but if it doesn't
 work, set it bigger.
 
-How it works: remember that a press and release of shift/space key
-sends a press of shift, its release, a press of space, and its
+How it works: remember that a release of shift/space key, without touching
+other keys, sends a release of shift, a press of space, and its
 release. Padding interval is inserted between the shift release and
 the space press. Bigger the value, likelier to work, but the latency
 gets bigger, too.
 
-I don't know what's happening in gtk, but this solves.
+I don't know what's happening inside of gtk, but this solves.
 
 More on keycodes
 ----------------
@@ -281,6 +295,10 @@ If you think this fork is good, please tell it to others, at blog,
 forum, etc. If it doesn't become popular, it remains my personal hack,
 and it may soon become impossible for me to maintain!
 
+Or, you can upvote this answer in stackoverflow.com to draw more
+attention:
+http://stackoverflow.com/a/8935973
+
 Please give your feedback. The host site doesn't provide an access
 counter, so I can't measure the popularity.
 
@@ -294,20 +312,23 @@ It's good *not* to trust authors you find on the Web. You may be
 reassured to know that I was a developer of Sawfish window manager:
   http://sawfish.wikia.com/wiki/User:Teika_kazura
 
-Maintainer wanted
------------------
-Please, take me over.
-
-Bugs, Wish list
-===============
+Bugs
+====
 
 Fixed bugs
 ----------
-* In 2.6.0
-  ** Double shift bug
-  Suppose both key a and b are translated to shift. Press a, b, and
-  release b. Then it should be 'B', but it used to emit lower b. It's
-  because the release of shift was sent before b key press.
+* In 2.6.3
+  ** Gtk widget double press issue.
+  To push a gtk button, sometimes you had to press space/shift key
+  twice, but this is fixed. If it doesn't work out-of-box, set
+  "AhmPaddingInterval" option.
+  (This "bug" is not the author's fault, but what's bad for users
+  are bugs.=)
+
+  ** Reset and Delayed key
+  "Delay" and "Reset" are features introduced in 2.6.2. If a delayed
+  key is pressed after a long enough period is passed (i.e. a reset is
+  done), the press was ignored. It's fixed now.
 
 * In 2.6.2
   ** Key release interference bug
@@ -329,21 +350,14 @@ Fixed bugs
   X's keycode limit is 255, but linux input driver's keycode limit is
   0x2ff. Now it accepts input codes > 255.
 
-* In 2.6.3
-  ** Gtk widget double press issue.
-  To push a gtk button, sometimes you had to press space/shift key
-  twice, but this is fixed. If it doesn't work out-of-box, set
-  "AhmPaddingInterval" option.
-  (This "bug" is not the author's fault, but what's bad for users
-  are bugs.=)
-
-  ** Reset and Delayed key
-  "Delay" and "Reset" are features introduced in 2.6.2. If a delayed
-  key is pressed after a long enough period is passed (i.e. a reset is
-  done), the press was ignored. It's fixed now.
+* In 2.6.0
+  ** Double shift bug
+  Suppose both key a and b are translated to shift. Press a, b, and
+  release b. Then it should be 'B', but it used to emit lower b. It's
+  because the release of shift was sent before b key press.
 
 Known bugs
----------
+----------
 * Switching VT: If your Ctrl is a transmod key, when you switch from X
   to a virtual console with Ctrl + Alt + F1, and switch back to X with
   Alt + F1, Ctrl get frozen. This is mitigated with "reset" feature.
@@ -354,9 +368,9 @@ Known bugs
 Not a bug
 ---------
 Many keyboards fail to send some combinations of key presses. For
-example, mine doesn't report Left-alt + space + cursor-down and
-alt + space + delete (whereas alt + space + up is dispatched!!)
-All normal symbol keys pressed with alt + space work.
+example, mine doesn't report Left-alt + space(Ctrl intended) +
+cursor-down nor alt + space + delete (whereas alt + space + up is
+dispatched!!)  All normal symbol keys pressed with alt + space work.
 
 Keyboards with "n-key rollover" are the solution, and completely ok
 for this hack, but they may be expensive. (USB connection can't report
@@ -368,25 +382,58 @@ Suppose you press space/shift and the left click of notebook touchpad.
 It'll work as shift + click, but a space key event follows. (Timeout
 can give a workaround.)
 
-This is a mere hack. The correct way will be to implement this in
-"XKB2", which is not yet (will never be??) put into Xorg. If you want
-this to be merged in Xorg, please help X input driver developers.
+Future direction
+================
+Probably the author, Teika kazura, won't develop this hack any more
+as a fork of X evdev driver. (Possibly I may improve keydouble
+mentioned below. I'm also interested in Python rewrite, which will
+be easier to receive user options.)
 
-Wishes
-------
-"Dynamic configuration", or config changes on-the-fly may be good,
-for example enabling some keys only when you're using an input method.
-I don't know anything about socket or inter-process communication,
-so please tell me how to do it.
+This hack can't be merged upstream.[1] One unlikely solution is to
+implement this in "XKB2", which will, probably, never be written.
+(Wayland is far likelier to be than XKB2.)
 
+[1] http://lists.x.org/archives/xorg/2010-December/052133.html
+
+Realistic solutions are to re-implement it using X Record extension
+and XTest extension. There's already Space2Ctrl and Keydouble. See
+below for more. (X Record records inputs, and XTest synthesizes
+events.)
+
+It's great if it's integrated into AutoKey[2]. It's a nice utility
+similar to AutoHotKey for MS Win, and it has some automation power
+using Python. It also uses X Record extension, and probably interfere
+with Space2Ctrl and Keydouble. Unfortunately, the AutoKey developer is
+not interested.[3] If you can, please help them.
+
+[2] http://code.google.com/p/autokey/
+[3] http://code.google.com/p/autokey/issues/detail?id=200
+
+Wish items
+----------
 Autorepeat support. For example, you press space/shift twice in a row,
-and hold it long enough, then it's turned to the press of space, rather
-than shift.
+and/or hold it long enough, then it's turned to the press of space,
+rather than shift.
+
+Delay improvement. See the "Delay" section
+
+Two-way arguments: currently an original-translated pair is written
+as "65:50". It's better to allow "65:50m" or "50m:65", "m" meaning
+"modifier".
+
+"Dynamic configuration", or config changes on-the-fly may be good, for
+example enabling some keys only when you're using an input method.  I
+don't know anything about socket or inter-process communication, so
+please tell me how to do it. (Space2Ctrl and Keydouble don't need
+this. Simply kill the process and run another.)
+
+See also this page for some ideas:
+http://www.ruska.it/michal/fork.html
 
 Bug reporting
 -------------
 When you report a bug, don't forget to disable autorepeat by
-  $ xset -r
+  $ xset -r [<keycode>]
 
 It's better to make AhmResetTime big, and if you enable AhmDelay,
 set it big, too.
@@ -404,8 +451,7 @@ More may be possible, by knowing which keys are modifiers. (This hack
 doesn't use any information which are modifiers. What's done is a
 simple translation.) You can get the required information by Xlib or
 XKB, but it'll be an inverted implementation, fetching the high-level
-part from the raw world. The correct way would be to re-implement all
-in XKB2. (See above for XKB2.)
+part from the raw world.
 
 Or programmable configuration (together with timestamp support),
 something like an automaton, may help.  But don't ask me it. I don't
@@ -445,24 +491,31 @@ it's better to try before you buy...
 switch whose touch is really soft. "HHK Professional" (HHK = Happy
 Hacking Keyboard) also uses Topre's switch.
 
-See also "not a bug" section above. Kinesis contoured, Realforce and
-HHK Professional come with n-key rollover.
+Kinesis contoured, Realforce and HHK Professional come with n-key
+rollover.  (See also "not a bug" section above for "key rollover".)
 
 FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
 touch, but I like the layout. You can buy it from Amazon Japan.
 (I don't like Amazon hegemony, but they provide English interface.
 Many Japanese keyboards are sold at amazon.com, too.)
 
+OWL-KB109BM(B)IIB has "Cherry mx brown switches", so may be good.
+See http://forums.gentoo.org/viewtopic.php?p=7019478#7019478 for more
+discussion.
+
 Alternatives
 ============
 There're some alternative candidates of at-home-modifier.
 
-* Space2Ctrl
-  https://github.com/r0adrunner/Space2Ctrl
+* Space2Ctrl & Keydouble
+  https://github.com/r0adrunner/Space2Ctrl (Space2Ctrl)
+  https://github.com/baskerville/keydouble (Keydouble)
 
-  It's minimal, only supports "Space to Ctrl", and not configurable.
-  It has pros and cons over at-home-modifier, discussed at the
-  home page of at-home-modifer.
+  Space2Ctrl by "r0adrunner" is minimal, only supports "Space to
+  Ctrl", and not configurable. Written in C++.
+
+  Keydouble by baskerville is a rewrite of Space2Ctrl in C, and has a
+  bit more options. Recommendable to some extent.
 
 * actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
@@ -482,6 +535,21 @@ History
 
 News
 ----
+* 2.7.1 (jun 2012):
+  * Merged upstream 2.7.0. No any change in ahm per se, except doc.
+    * An upstream bugfix of horizontal scroll, X.Org Bug 46205, is
+      included. (The fix is published after the 2.7.0 release.)
+    * Added an option to configure script "--without-mtdev". The
+      upstream code always checks mtdev, and enable it when found.
+      If you don't pass the above option, it falls back to the
+      original behavior.
+
+      This change, commit 371543edf0b, probably has to be reverted
+      before merging upstream 2.8.0. The upstream suggests mtdev
+      dependence will be forced in future versions.
+  * Read also "Future direction" section in this README.
+  * The hack version is 2.7.1, not 2.7.0, without much reason.
+
 * 2.6.4 (dec 2011):
   * Other device awareness
     When you press space/shift and a mouse button, the result used to be
@@ -543,8 +611,13 @@ http://dev.ariel-networks.com/Members/matsuyama/keyboard-customize
 [3] (Japanese):
 http://d.hatena.ne.jp/jeneshicc/20100306/1267843799
 
+Space2Ctrl was (probably) written independently in 2011.
+
 Source code
 ===========
+
+(Rather than developing this hack more, I recommend you to deal with
+Keydouble or AutoKey.)
 
 Required knowledge
 ------------------
@@ -556,7 +629,7 @@ src/evdev.h
 Search for "ahm variables".
 
 In src/evdev.c, gcc __attribute__ is used. To support other compilers,
-it's defined to null when __GNUC__ is not defined.
+it's defined null when __GNUC__ is not defined.
 
 src/evdev.c
 -----------
@@ -576,6 +649,10 @@ src/evdev.c
   and asynchronous timer is set. Timer related functions I've added
   are: AhmWakeupHandler, AhmBlockHandler, AhmRegisterTimers and
   AhmFinalise.
+
+configure.ac
+------------
+See the 2.7.1 news.
 
 License
 =======
