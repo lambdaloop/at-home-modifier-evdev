@@ -11,6 +11,7 @@ Contents
 * Usage
 * Author
 * Bugs
+* Future direction
 * Random bits
 * History (News are here)
 * Source code
@@ -398,7 +399,9 @@ implement this in "XKB2", which will, probably, never be written.
 Realistic solutions are to re-implement it using X Record extension
 and XTest extension. There's already Space2Ctrl and Keydouble. See
 below for more. (X Record records inputs, and XTest synthesizes
-events.)
+events. They're better than mine since they work in user space. The
+codes are far smaller and much easier to read, and you don't have to
+keep up with Xorg changes so much.)
 
 It's great if it's integrated into AutoKey[2]. It's a nice utility
 similar to AutoHotKey for MS Win, and it has some automation power
@@ -514,8 +517,8 @@ There're some alternative candidates of at-home-modifier.
   Space2Ctrl by "r0adrunner" is minimal, only supports "Space to
   Ctrl", and not configurable. Written in C++.
 
-  Keydouble by baskerville is a rewrite of Space2Ctrl in C, and has a
-  bit more options. Recommendable to some extent.
+  Keydouble by baskerville is a rewrite of Space2Ctrl in C. Has a bit
+  less options than mine.
 
 * actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
