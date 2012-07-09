@@ -1062,7 +1062,9 @@ EvdevProcessEvent(InputInfoPtr pInfo, struct input_event *ev)
 static void
 EvdevFreeMasks(EvdevPtr pEvdev)
 {
+#ifdef MULTITOUCH
     int i;
+#endif
 
     valuator_mask_free(&pEvdev->vals);
     valuator_mask_free(&pEvdev->old_vals);
@@ -1345,7 +1347,9 @@ EvdevAddAbsValuatorClass(DeviceIntPtr device)
 
     i = 0;
     for (axis = ABS_X; i < MAX_VALUATORS && axis <= ABS_MAX; axis++) {
+#ifdef MULTITOUCH
         int j;
+#endif
         int mapping;
         pEvdev->axis_map[axis] = -1;
         if (!EvdevBitIsSet(pEvdev->abs_bitmask, axis) ||
