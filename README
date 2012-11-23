@@ -538,6 +538,9 @@ History
 
 News
 ----
+* 2.7.3 (nov 2012):
+  * Merged upstream 2.7.3. Ahm-2.7.2 was never released.
+
 * 2.7.1 (jun 2012):
   * Merged upstream 2.7.0. No any change in ahm per se, except doc.
     * An upstream bugfix of horizontal scroll, X.Org Bug 46205, is
