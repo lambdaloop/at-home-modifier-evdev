@@ -68,6 +68,10 @@
 #define HAVE_SMOOTH_SCROLLING 1
 #endif
 
+#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 18
+#define LogMessageVerbSigSafe xf86MsgVerb
+#endif
+
 #define EVDEV_MAXBUTTONS 32
 #define EVDEV_MAXQUEUE 32
 
@@ -162,7 +166,8 @@ typedef struct {
 
     int num_vals;           /* number of valuators */
     int num_mt_vals;        /* number of multitouch valuators */
-    int axis_map[max(ABS_CNT, REL_CNT)]; /* Map evdev <axis> to index */
+    int abs_axis_map[ABS_CNT]; /* Map evdev ABS_* to index */
+    int rel_axis_map[REL_CNT]; /* Map evdev REL_* to index */
     ValuatorMask *vals;     /* new values coming in */
     ValuatorMask *old_vals; /* old values for calculating relative motion */
     ValuatorMask *prox;     /* last values set while not in proximity */
@@ -211,9 +216,6 @@ typedef struct {
   int                 ahmQueueBottom; /* Queue from here */
 
   /* end of ahm variables */
-
-    /* XKB stuff has to be per-device rather than per-driver */
-    XkbRMLVOSet rmlvo;
 
     /* Middle mouse button emulation */
     struct {
@@ -284,6 +286,8 @@ typedef struct {
     EventQueueRec           queue[EVDEV_MAXQUEUE];
 
     enum fkeymode           fkeymode;
+
+    char *type_name;
 } EvdevRec, *EvdevPtr;
 
 /* Event posting functions */
