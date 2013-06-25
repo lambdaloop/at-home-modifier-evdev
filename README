@@ -9,6 +9,7 @@ Contents
 * Web site
 * Get it
 * Usage
+ * FAQ
 * Author
 * Bugs
 * Future direction
@@ -19,13 +20,14 @@ Contents
 
 What it is
 ==========
-It enables for example "shift/space dual role key." When you press the
+It enables for example "Shift/Space dual role key." When you press the
 space key alone, it's a space; but when you press it with another key,
-it's a shift. Any pairs of keys are possible. It is a fork of evdev
-driver = xf86-input-evdev. It's ** only for Linux ** - X in other
-platforms don't use evdev driver. You can use "keydouble" referred
-below if you're not a Linux user. For MS Win users, there's
-AutoHotKey.
+it's a shift. And/or Alt/Esc, AltGr/BS...
+
+It is a fork of evdev driver = xf86-input-evdev. It's ** only for
+Linux ** - X in other platforms don't use evdev driver. You can use
+"keydouble" referred below if you're not a Linux user. For MS Win
+users, there's AutoHotKey.
 
 With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
@@ -41,9 +43,6 @@ Web site
 ========
 http://gitorious.org/at-home-modifier/pages/Home
 
-Forum / mailing list is found at:
-http://at-home-modifier.2300353.n4.nabble.com/
-
 Distro forum threads:
 * Gentoo: https://forums.gentoo.org/viewtopic-t-865313.html
 * Arch: https://bbs.archlinux.org/viewtopic.php?pid=938140
@@ -56,10 +55,10 @@ Get it
 Download
 --------
 The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.7.1.tar.gz
+http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.8.0.tar.gz
 
-You can also download the patch against the Xorg's original
-xf86-input-evdev from the website.
+You can also download the patch against the Xorg's original driver,
+"xf86-input-evdev" from the website.
 
 git
 ---
@@ -155,7 +154,7 @@ try.
 
 *** Other keys ***
 
-Assume you want the left Alt to be Alt/Esc. Then assign Esc to that
+Assume you want the Left-Alt to be Alt/Esc. Then assign Esc to that
 key, using xmodmap. If you don't have any other Alt keys, then allocate
 Alt to keycode 240 or so, which must be unused on usual keyboards.
 
@@ -290,10 +289,17 @@ Hm, if you use for example Italian layout, see
 
 Aha, so that key is basically "2".
 
+FAQ
+---
+* Q: I need to input Shift+Space. How can I do it if my space is
+     Space/Shift key?
+  A: Simple. Turn both of the original Space and Shift into Space/Shift keys,
+     for example.
+
 Please!
 -------
-If you think this fork is good, please tell it to others, at blog,
-forum, etc. If it doesn't become popular, it remains my personal hack,
+If you think this fork is good, please tell it to others, at blogs,
+forums, etc. If it doesn't become popular, it remains my personal hack,
 and it may soon become impossible for me to maintain!
 
 Or, you can upvote this answer in stackoverflow.com to draw more
@@ -385,16 +391,8 @@ can give a workaround.)
 
 Future direction
 ================
-Probably the author, Teika kazura, won't develop this hack any more
-as a fork of X evdev driver. (Possibly I may improve keydouble
-mentioned below. I'm also interested in Python rewrite, which will
-be easier to receive user options.)
-
-This hack can't be merged upstream.[1] One unlikely solution is to
-implement this in "XKB2", which will, probably, never be written.
-(Wayland is far likelier to be than XKB2.)
-
-[1] http://lists.x.org/archives/xorg/2010-December/052133.html
+Probably the author, Teika kazura, won't develop this hack any more as
+a fork of X evdev driver.
 
 Realistic solutions are to re-implement it using X Record extension
 and XTest extension. There's already Space2Ctrl and Keydouble. See
@@ -411,6 +409,12 @@ not interested.[3] If you can, please help them.
 
 [2] http://code.google.com/p/autokey/
 [3] http://code.google.com/p/autokey/issues/detail?id=200
+
+This hack can't be merged upstream.[1] One unlikely solution is to
+implement this in "XKB2", which will, probably, never be written.
+(Wayland is far likelier to be than XKB2.)
+
+[1] http://lists.x.org/archives/xorg/2010-December/052133.html
 
 Wish items
 ----------
@@ -491,7 +495,7 @@ But it's only the layout. I can't assure the overall quality. Of course
 it's better to try before you buy...
 
 "Realforce" keyboard made by Topre is unique with capacitive key
-switch whose touch is really soft. "HHK Professional" (HHK = Happy
+switches whose touch is really soft. "HHK Professional" (HHK = Happy
 Hacking Keyboard) also uses Topre's switch.
 
 Kinesis contoured, Realforce and HHK Professional come with n-key
@@ -510,16 +514,23 @@ Alternatives
 ============
 There're some alternative candidates of at-home-modifier.
 
-* Space2Ctrl & Keydouble
+* Xcape, Space2Ctrl & Keydouble
+  https://github.com/alols/xcape (xcape)
   https://github.com/r0adrunner/Space2Ctrl (Space2Ctrl)
   https://github.com/baskerville/keydouble (Keydouble)
+
+  Xcape is independently written by Albin Olsson. Accepts
+  configuration with key names in addition to keycodes. The keydouble
+  author recommends xcape over keydouble.
 
   Space2Ctrl by "r0adrunner" is minimal, only supports "Space to
   Ctrl", and not configurable. Written in C++.
 
-  Keydouble by baskerville is a rewrite of Space2Ctrl in C. Has a bit
-  less options than mine.
+  Keydouble by "baskerville" is a rewrite of Space2Ctrl in C. Has a
+  bit less options than mine.
 
+Obsolete alternatives
+---------------------
 * actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
 
@@ -529,7 +540,7 @@ There're some alternative candidates of at-home-modifier.
   Users") for Linux & Darwin: It's a port of a Windows key tuner
   software "窓使いの憂鬱", comparable to AutoHotkey. Japanese
   documentation only. The author is not reachable. Not maintained
-  actively. It uses uinput.
+  actively. It uses uinput. The last update was in Nov 2011.
 
     http://www42.tok2.com/home/negidakude/
 
@@ -538,6 +549,14 @@ History
 
 News
 ----
+* 2.8.0 (jun 2013):
+  * Merged upstream 2.8.0.
+    More precisely,
+    * There're two fix-up commits after 2.8.0 in the upstream. They're
+      merged too.
+    * In ahm-2.7.1, configure option "--without-mtdev" was added. But
+      now it's deleted, and mtdev dependency is mandatory.
+
 * 2.7.3 (nov 2012):
   * Merged upstream 2.7.3. Ahm-2.7.2 was never released.
 
@@ -655,10 +674,6 @@ src/evdev.c
   and asynchronous timer is set. Timer related functions I've added
   are: AhmWakeupHandler, AhmBlockHandler, AhmRegisterTimers and
   AhmFinalise.
-
-configure.ac
-------------
-See the 2.7.1 news.
 
 License
 =======
