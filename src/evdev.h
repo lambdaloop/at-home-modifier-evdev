@@ -295,7 +295,7 @@ typedef struct {
  * ahm changed the type. originally:
  * void EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
  */
-static int EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
+int EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value);
 void EvdevQueueButtonEvent(InputInfoPtr pInfo, int button, int value);
 void EvdevQueueProximityEvent(InputInfoPtr pInfo, int value);
 #ifdef MULTITOUCH

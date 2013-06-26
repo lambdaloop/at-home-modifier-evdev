@@ -342,7 +342,7 @@ EvdevNextInQueue(InputInfoPtr pInfo)
  * Returns 0 on failure, 1 on success.
  * In the original, upstream code, it's a void function.
  */
-static int
+int
 EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
 {
     int code = ev->code + MIN_KEYCODE;
