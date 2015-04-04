@@ -41,7 +41,8 @@ the original key if necessary, judging from the last event.
 
 Web site
 ========
-http://gitorious.org/at-home-modifier/pages/Home
+https://gitlab.com/at-home-modifier/at-home-modifier-evdev/wikis/home
+(Until Mar 2015, it was hosted at gitorious.org.)
 
 Distro forum threads:
 * Gentoo: https://forums.gentoo.org/viewtopic-t-865313.html
@@ -54,8 +55,7 @@ Get it
 
 Download
 --------
-The tar.gz is here:
-http://gitorious.org/at-home-modifier/download/blobs/raw/master/source/ahm-2.8.0.tar.gz
+The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.9.1.tar.gz
 
 You can also download the patch against the Xorg's original driver,
 "xf86-input-evdev" from the website.
@@ -64,7 +64,7 @@ git
 ---
 Git access is available, too. For the first time, install git, and clone as
   $ cd some/dir
-  $ git clone git://gitorious.org/at-home-modifier/at-home-modifier.git
+  $ git clone git@gitlab.com:at-home-modifier/at-home-modifier-evdev.git
 
 You can receive updates by
   $ cd some/dir/at-home-modifier
@@ -97,7 +97,7 @@ driver, too. (Change in z doesn't affect, but x or y does.)
 Usage
 =====
 First, know the keycodes you need, which are numbers assigned to each
-physical key. It's easiest to install and invoke "xev" commands. In my
+physical key. It's easiest to invoke "xmodmap -pk" or "xev" commands. In my
 case it says space is 65, and left shift is 50. OK. (See below for
 complicated cases.) Then write your xorg.conf or
 xorg.conf.d/10-keyboard.conf:
@@ -188,29 +188,6 @@ then a single press and release of space/shift key produces nothing if
 the press lasts more than 0.4 sec. The default is 0.6 sec. You can
 disable timeout by setting it to 0.
 
-*** Fast type fix (delay) ***
-
-(Probably this option is not so satisfactory) Users of this hack often
-have "tongue-twister of fingers": Suppose you want a space and a lower
-case x. If the first press of space/shift is followed first by a press
-of x and then a release of space/shift, you'll get an upper-case X
-instead.
-
-To fix it, you can let "delay" be associated to space/shift, like:
-
-    Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
-
-Then the press of x (or any) following space/shift is "delayed",
-and completes after release of space/shift or x.
-
-There's a trade off. Whenever you want a real shift, you have to
-release the space/shift later.
-
-This feature is not (yet) satisfactory for the author. Maybe it
-should be treated as a modifier only if the key is pressed long
-enough (say 100ms), in addition to / instead of the press-release
-orders.
-
 *** Successive transmod tuning ***
 
 A subtle fix is enabled by default; suppose a transmod X has been
@@ -258,6 +235,29 @@ gets bigger, too.
 
 I don't know what's happening inside of gtk, but this solves.
 
+*** Fast type fix (delay) ***
+
+(Probably this option is not so satisfactory) Users of this hack often
+have "tongue-twister of fingers": Suppose you want a space and a lower
+case x. If the first press of space/shift is followed first by a press
+of x and then a release of space/shift, you'll get an upper-case X
+instead.
+
+To fix it, you can let "delay" be associated to space/shift, like:
+
+    Option "AhmDelay" "65 102" # Delayed keys. Separate by white space
+
+Then the press of x (or any) following space/shift is "delayed",
+and completes after release of space/shift or x.
+
+There's a trade off. Whenever you want a real shift, you have to
+release the space/shift later.
+
+This feature is not (yet) satisfactory for the author. Maybe it
+should be treated as a modifier only if the key is pressed long
+enough (say 100ms), in addition to / instead of the press-release
+orders.
+
 More on keycodes
 ----------------
 It's good to know that you can also tell keycodes by looking at
@@ -296,22 +296,9 @@ FAQ
   A: Simple. Turn both of the original Space and Shift into Space/Shift keys,
      for example.
 
-Please!
--------
-If you think this fork is good, please tell it to others, at blogs,
-forums, etc. If it doesn't become popular, it remains my personal hack,
-and it may soon become impossible for me to maintain!
-
-Or, you can upvote this answer in stackoverflow.com to draw more
-attention:
-http://stackoverflow.com/a/8935973
-
-Please give your feedback. The host site doesn't provide an access
-counter, so I can't measure the popularity.
-
 Author
 ======
-Teika kazura <teika ahm-is-great at lavabit ahm-is-great dot com>
+Teika kazura <teika ahm-is-great at gmx ahm-is-great dot com>
 
 Delete "ahm-is-great" in the address.
 
@@ -394,27 +381,12 @@ Future direction
 Probably the author, Teika kazura, won't develop this hack any more as
 a fork of X evdev driver.
 
-Realistic solutions are to re-implement it using X Record extension
-and XTest extension. There's already Space2Ctrl and Keydouble. See
-below for more. (X Record records inputs, and XTest synthesizes
-events. They're better than mine since they work in user space. The
-codes are far smaller and much easier to read, and you don't have to
-keep up with Xorg changes so much.)
-
-It's great if it's integrated into AutoKey[2]. It's a nice utility
-similar to AutoHotKey for MS Win, and it has some automation power
-using Python. It also uses X Record extension, and probably interfere
-with Space2Ctrl and Keydouble. Unfortunately, the AutoKey developer is
-not interested.[3] If you can, please help them.
-
-[2] http://code.google.com/p/autokey/
-[3] http://code.google.com/p/autokey/issues/detail?id=200
-
-This hack can't be merged upstream.[1] One unlikely solution is to
-implement this in "XKB2", which will, probably, never be written.
-(Wayland is far likelier to be than XKB2.)
-
-[1] http://lists.x.org/archives/xorg/2010-December/052133.html
+Realistic solutions are to re-implement it in the user space. Then
+codes will be far smaller and much easier to read, and you'll seldom
+have to keep up with Xorg changes. Xcape (see below) does this, by
+using X Record extension and XTest extension. (X Record records
+inputs, and XTest synthesizes events. ) However, XTest and X-Record
+may not work in Wayland.
 
 Wish items
 ----------
@@ -450,9 +422,9 @@ warning.
 
 Corner cases in press and release order
 ---------------------------------------
-There're many corner cases, and I can't predict all. The option
-"AhmFreezeTT" is easy not only to reason, but also to code, but
-more complicated examples may not be so.
+There're many corner cases, and I don't know all. The option
+"AhmFreezeTT" is easy not only to reason, but also to code, but more
+complicated examples may not be so.
 
 More may be possible, by knowing which keys are modifiers. (This hack
 doesn't use any information which are modifiers. What's done is a
@@ -512,25 +484,23 @@ discussion.
 
 Alternatives
 ============
-There're some alternative candidates of at-home-modifier.
-
-* Xcape, Space2Ctrl & Keydouble
-  https://github.com/alols/xcape (xcape)
-  https://github.com/r0adrunner/Space2Ctrl (Space2Ctrl)
-  https://github.com/baskerville/keydouble (Keydouble)
+* Xcape
+  https://github.com/alols/xcape
 
   Xcape is independently written by Albin Olsson. Accepts
-  configuration with key names in addition to keycodes. The keydouble
-  author recommends xcape over keydouble.
-
-  Space2Ctrl by "r0adrunner" is minimal, only supports "Space to
-  Ctrl", and not configurable. Written in C++.
-
-  Keydouble by "baskerville" is a rewrite of Space2Ctrl in C. Has a
-  bit less options than mine.
+  configuration with key names in addition to keycodes.
 
 Obsolete alternatives
 ---------------------
+* Space2Ctrl and Keydouble
+  Space2Ctrl by "r0adrunner" is minimal, only supports "Space to
+  Ctrl", and not configurable. Written in C++.
+  Keydouble by "baskerville" is a rewrite of Space2Ctrl in C. Has a
+  bit less options than mine.
+
+    https://github.com/r0adrunner/Space2Ctrl (Space2Ctrl)
+    https://github.com/baskerville/keydouble (Keydouble)
+
 * actkbd: It works by direct access to /dev/input, but not updated
   since 2007. I don't think it's flexible enough.
 
@@ -549,6 +519,11 @@ History
 
 News
 ----
+* 2.9.1 (mar 2015):
+  * Merged upstream 2.9.1. Also the commit b370ccdff is included,
+    which fixes the X.Org Bug 80470:
+    <http://bugs.freedesktop.org/show_bug.cgi?id=80470>.
+
 * 2.8.0 (jun 2013):
   * Merged upstream 2.8.0.
     More precisely,
@@ -615,8 +590,6 @@ News
 * 2.5.1 (feb 2011): Minor documentation updates.
 * 2.5.0 (feb 2011): Initial release. Forked from upstream 2.5.0 = xf86-input-evdev-2.5.0.
 
-Versions 2.X.y are based on the upstream 2.X.0, unless noted explicitly.
-
 Background
 ----------
 What was proposed originally was called "SandS" - stands for "Space and
@@ -640,9 +613,6 @@ Space2Ctrl was (probably) written independently in 2011.
 
 Source code
 ===========
-
-(Rather than developing this hack more, I recommend you to deal with
-Keydouble or AutoKey.)
 
 Required knowledge
 ------------------
