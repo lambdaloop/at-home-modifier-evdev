@@ -55,7 +55,7 @@ Get it
 
 Download
 --------
-The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.9.1.tar.gz
+The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.9.2.tar.gz
 
 You can also download the patch against the Xorg's original driver,
 "xf86-input-evdev" from the website.
@@ -519,10 +519,9 @@ History
 
 News
 ----
-* 2.9.1 (mar 2015):
-  * Merged upstream 2.9.1. Also the commit b370ccdff is included,
-    which fixes the X.Org Bug 80470:
-    <http://bugs.freedesktop.org/show_bug.cgi?id=80470>.
+* 2.9.2 (apr 2015):
+  * Merged upstream 2.9.2. It also includes the fix of bug 84445, done in commit 8868f61:
+   https://bugs.freedesktop.org/show_bug.cgi?id=84445
 
 * 2.8.0 (jun 2013):
   * Merged upstream 2.8.0.
