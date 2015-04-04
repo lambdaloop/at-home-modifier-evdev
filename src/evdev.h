@@ -48,6 +48,8 @@
 #include <mtdev.h>
 #endif
 
+#include <libevdev/libevdev.h>
+
 #ifndef EV_CNT /* linux 2.6.23 kernels and earlier lack _CNT defines */
 #define EV_CNT (EV_MAX+1)
 #endif
@@ -158,8 +160,7 @@ typedef struct {
 } EventQueueRec, *EventQueuePtr;
 
 typedef struct {
-    unsigned short id_vendor;
-    unsigned short id_product;
+    struct libevdev *dev;
 
     char *device;
     int grabDevice;         /* grab the event device? */
@@ -174,7 +175,10 @@ typedef struct {
     ValuatorMask *mt_mask;
     ValuatorMask **last_mt_vals;
     int cur_slot;
-    enum SlotState slot_state;
+    struct slot {
+        int dirty;
+        enum SlotState state;
+    } *slots;
 #ifdef MULTITOUCH
     struct mtdev *mtdev;
 #endif
@@ -255,6 +259,11 @@ typedef struct {
         Time                expires;     /* time of expiry */
         Time                timeout;
     } emulateWheel;
+    struct {
+        int                 vert_delta;
+        int                 horiz_delta;
+        int                 dial_delta;
+    } smoothScroll;
     /* run-time calibration */
     struct {
         int                 min_x;
@@ -268,15 +277,6 @@ typedef struct {
     int reopen_attempts; /* max attempts to re-open after read failure */
     int reopen_left;     /* number of attempts left to re-open the device */
     OsTimerPtr reopen_timer;
-
-    /* Cached info from device. */
-    char name[1024];
-    unsigned long bitmask[NLONGS(EV_CNT)];
-    unsigned long key_bitmask[NLONGS(KEY_CNT)];
-    unsigned long rel_bitmask[NLONGS(REL_CNT)];
-    unsigned long abs_bitmask[NLONGS(ABS_CNT)];
-    unsigned long led_bitmask[NLONGS(LED_CNT)];
-    struct input_absinfo absinfo[ABS_CNT];
 
     /* minor/major number */
     dev_t min_maj;
@@ -304,10 +304,8 @@ void EvdevQueueTouchEvent(InputInfoPtr pInfo, unsigned int touch,
 #endif
 void EvdevPostButtonEvent(InputInfoPtr pInfo, int button, enum ButtonAction act);
 void EvdevQueueButtonClicks(InputInfoPtr pInfo, int button, int count);
-void EvdevPostRelativeMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
-				   int v[MAX_VALUATORS]);
-void EvdevPostAbsoluteMotionEvents(InputInfoPtr pInfo, int num_v, int first_v,
-				   int v[MAX_VALUATORS]);
+void EvdevPostRelativeMotionEvents(InputInfoPtr pInfo);
+void EvdevPostAbsoluteMotionEvents(InputInfoPtr pInfo);
 unsigned int EvdevUtilButtonEventToButtonNumber(EvdevPtr pEvdev, int code);
 
 /* Middle Button emulation */
