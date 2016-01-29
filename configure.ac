@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-input-evdev],
-        [2.9.2],
+        [2.10.1],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-input-evdev])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -44,19 +44,11 @@ XORG_MACROS_VERSION(1.8)
 XORG_DEFAULT_OPTIONS
 
 # Obtain compiler/linker options from server and required extensions
-PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto inputproto)
+PKG_CHECK_MODULES(XORG, [xorg-server >= 1.12] xproto [inputproto >= 2.1.99.3])
 PKG_CHECK_MODULES(UDEV, libudev)
 
-PKG_CHECK_MODULES(XI22, [inputproto >= 2.1.99.3] [xorg-server >= 1.11.99.901], HAVE_XI22="yes", HAVE_XI22="no")
 PKG_CHECK_MODULES(LIBEVDEV, [libevdev >= 0.4])
-
-if test "x$HAVE_XI22" = xyes; then
-        # Obtain compiler/linker options for mtdev
-        PKG_CHECK_MODULES(MTDEV, mtdev, HAVE_MTDEV="yes", HAVE_MTDEV="no")
-fi
-if test "x$HAVE_XI22" = xyes && test "x$HAVE_MTDEV" = xyes; then
-        AC_DEFINE(MULTITOUCH, 1, [XI2.2 available])
-fi
+PKG_CHECK_MODULES(MTDEV, mtdev)
 
 # Define a configure option for an alternate input module directory
 AC_ARG_WITH(xorg-module-dir,
@@ -66,6 +58,13 @@ AC_ARG_WITH(xorg-module-dir,
             [moduledir="$libdir/xorg/modules"])
 inputdir=${moduledir}/input
 AC_SUBST(inputdir)
+
+AC_ARG_WITH(xorg-conf-dir,
+            AC_HELP_STRING([--with-xorg-conf-dir=DIR],
+                           [Default xorg.conf.d directory [[default=$prefix/share/X11/xorg.conf.d/]]]),
+            [xorgconfdir="$withval"],
+            [xorgconfdir="$prefix/share/X11/xorg.conf.d"])
+AC_SUBST(xorgconfdir)
 
 # X Server SDK location is required to install evdev header files
 # This location is also relayed in the xorg-evdev.pc file
