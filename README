@@ -26,15 +26,15 @@ it's a shift. And/or Alt/Esc, AltGr/BS...
 
 It is a fork of evdev driver = xf86-input-evdev. It's ** only for
 Linux ** - X in other platforms don't use evdev driver. You can use
-"keydouble" referred below if you're not a Linux user. For MS Win
-users, there's AutoHotKey.
+"xcape" referred below if you're not a Linux user. (For MS Win, use
+AutoHotKey, and for Mac, Karabiner, formerly named keyremap4macbook)
 
 With this hack, your hands can stay at the home position almost
 always, and feel more "at home", thus "At Home Modifier".
 
 More precisely, you specify pairs of two keycodes, the "original", and
 the "translated". The last event gets recorded in this patch. After
-the press of one of "original" keys, the driver instead reports a
+the press of an "original" key, the driver instead reports a
 translated key press event. When an original key is released, it sends
 a release of the translated key. And it sends a press and release of
 the original key if necessary, judging from the last event.
@@ -47,15 +47,15 @@ https://gitlab.com/at-home-modifier/at-home-modifier-evdev/wikis/home
 Distro forum threads:
 * Gentoo: https://forums.gentoo.org/viewtopic-t-865313.html
 * Arch: https://bbs.archlinux.org/viewtopic.php?pid=938140
-* Ubuntu: http://ubuntuforums.org/showthread.php?p=10907505
 * Debian: http://forums.debian.net/viewtopic.php?f=20&t=65950
+* Ubuntu: http://ubuntuforums.org/showthread.php?p=10907505 (Sorry, closed thread. Use Debian forum instead.)
 
 Get it
 ======
 
 Download
 --------
-The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.9.2.tar.gz
+The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.10.1.tar.gz
 
 You can also download the patch against the Xorg's original driver,
 "xf86-input-evdev" from the website.
@@ -83,7 +83,8 @@ Install
 * Gentoo Linux users can use ebuild files. Visit the Gentoo Forum thread.
 * Arch Linux AUR entries are there. Visit the Arch Forum thread.
 * Debian and its derivatives: Visit the Debian Forum thread.
-*** For Ubuntu, Yuri Khan has provided PPA for long: https://launchpad.net/~yurivkhan/+archive/ahm
+*** In Debian, the original package is called "xserver-xorg-input-evdev"
+*** For Ubuntu, Yuri Khan has been providing PPA for years: https://launchpad.net/~yurivkhan/+archive/ahm
 
 Forum threads are listed above.
 
@@ -105,7 +106,7 @@ xorg.conf.d/10-keyboard.conf:
 
   # For the details see "man xorg.conf" or your distro doc.
   Section "InputClass"
-    Identifier "my keyboard"
+    Identifier "my keyboard" # You can name this arbitrarily
     Driver "evdev"
     Option "XKBOptions" "terminate:ctrl_alt_bksp" # and so on
 
@@ -155,7 +156,7 @@ try.
 
 *** Other keys ***
 
-Assume you want the Left-Alt to be Alt/Esc. Then assign Esc to that
+Suppose you want the Left-Alt to be Alt/Esc. Then assign Esc to that
 key, using xmodmap. If you don't have any other Alt keys, then allocate
 Alt to keycode 240 or so, which must be unused on usual keyboards.
 
@@ -219,7 +220,7 @@ time things get reset is the first time you touch the keyboard.
 *** Gtk widget double-press workaround (padding interval) ***
 
 Suppose you focus a gtk window with a button widget. When you press
-the shift/space, the button should be pressed. But with this hack,
+the shift/space, the gtk button should be pressed. But with this hack,
 you may have to press the key twice; the first press merely focuses
 the button, and the second key press becomes the real push.
 
@@ -475,13 +476,15 @@ Kinesis contoured, Realforce and HHK Professional come with n-key
 rollover.  (See also "not a bug" section above for "key rollover".)
 
 FYI: mine is OWL-KB86STD made by Owltech. It's cheap, and has cheap
-touch, but I like the layout. You can buy it from Amazon Japan.
-(I don't like Amazon hegemony, but they provide English interface.
-Many Japanese keyboards are sold at amazon.com, too.)
+touch, but I like the layout.
 
-OWL-KB109BM(B)IIB has "Cherry mx brown switches", so may be good.
-See http://forums.gentoo.org/viewtopic.php?p=7019478#7019478 for more
+OWL-KB109BM(B)IIB has "Cherry mx brown switches", so may be good.  See
+http://forums.gentoo.org/viewtopic.php?p=7019478#7019478 for more
 discussion.
+
+You can buy them from Amazon Japan. (I don't like Amazon hegemony,
+but they provide English interface. Many Japanese keyboards are sold
+at amazon.com, too.)
 
 Alternatives
 ============
@@ -520,6 +523,9 @@ History
 
 News
 ----
+* 2.10.1 (feb 2016):
+  * Merged upstream 2.10.1.
+
 * 2.9.2 (apr 2015):
   * Merged upstream 2.9.2. It also includes the fix of bug 84445, done in commit 8868f61:
    https://bugs.freedesktop.org/show_bug.cgi?id=84445
@@ -616,7 +622,7 @@ Source code
 
 Required knowledge
 ------------------
-Required is only C knowledge, none of X. I've added some comments, so
+What's required is only C knowledge, none of X. I've added some comments, so
 it must be easy to understand.
 
 src/evdev.h
@@ -624,7 +630,7 @@ src/evdev.h
 Search for "ahm variables".
 
 In src/evdev.c, gcc __attribute__ is used. To support other compilers,
-it's defined null when __GNUC__ is not defined.
+it's defined as null when __GNUC__ is not defined.
 
 src/evdev.c
 -----------
