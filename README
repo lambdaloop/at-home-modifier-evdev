@@ -55,7 +55,7 @@ Get it
 
 Download
 --------
-The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.10.1.tar.gz
+The tar.gz is at: https://gitlab.com/at-home-modifier/download/raw/master/source/ahm-2.10.3.tar.gz
 
 You can also download the patch against the Xorg's original driver,
 "xf86-input-evdev" from the website.
@@ -523,6 +523,9 @@ History
 
 News
 ----
+* 2.10.3 (july 2016):
+  * Merged upstream 2.10.3, which is 2.10.2 plus one bugfix, https://bugs.freedesktop.org/show_bug.cgi?id=95315
+
 * 2.10.1 (feb 2016):
   * Merged upstream 2.10.1.
 
