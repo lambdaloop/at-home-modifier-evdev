@@ -769,6 +769,14 @@ static void
 EvdevProcessValuators(InputInfoPtr pInfo)
 {
     EvdevPtr pEvdev = pInfo->private;
+    int val;
+
+    if (pEvdev->abs_vals) {
+            if (valuator_mask_fetch(pEvdev->abs_vals, 0, &val))
+                    valuator_mask_set(pEvdev->old_vals, 0, val);
+            if (valuator_mask_fetch(pEvdev->abs_vals, 1, &val))
+                    valuator_mask_set(pEvdev->old_vals, 1, val);
+    }
 
     /* Apply transformations on relative coordinates */
     if (pEvdev->rel_queued) {
@@ -1104,6 +1112,12 @@ EvdevProcessAbsoluteMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
     if (ev->code > ABS_MAX)
         return;
 
+    /* Always store the current abs valuator, we need it to update old_vals
+     * which is required by wheel emulation */
+    map = pEvdev->abs_axis_map[ev->code];
+    if (map < 2)
+            valuator_mask_set(pEvdev->abs_vals, map, value);
+
     if (EvdevWheelEmuFilterMotion(pInfo, ev))
         return;
 
@@ -1120,9 +1134,7 @@ EvdevProcessAbsoluteMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
                 valuator_mask_set(pEvdev->rel_vals, map, value - oldval);
                 pEvdev->rel_queued = 1;
             }
-            valuator_mask_set(pEvdev->old_vals, map, value);
         } else {
-            /* the normal case: just store the number. */
             valuator_mask_set(pEvdev->abs_vals, map, value);
             pEvdev->abs_queued = 1;
         }
@@ -3245,6 +3257,9 @@ static void EvdevInitButtonLabels(EvdevPtr pEvdev, int natoms, Atom *atoms)
     {
         int group = (button % 0x100)/16;
         int idx = button - ((button/16) * 16);
+
+        if (group >= ArrayLength(btn_labels))
+            break;
 
         if (!libevdev_has_event_code(pEvdev->dev, EV_KEY, button))
             continue;
