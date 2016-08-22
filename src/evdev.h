@@ -191,6 +191,12 @@ typedef struct {
   int                 transModCount[256]; /* records how many times fold the translated key is pressed */
   unsigned int        transModFreeze[256]; /* 1 means temporarily transmod is frozen. */
 
+  unsigned int        transModPressed[256]; /* 1 means we pressed the transMod (so that we release later) */
+
+  Time                ahmTimePressed[256];
+    Time                lastPlainPressTime; 
+   
+    
   int                 ahmTimeout;
   struct timeval      lastEventTime;
 

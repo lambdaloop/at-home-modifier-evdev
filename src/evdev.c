@@ -91,14 +91,14 @@
 
 /* Any of those triggers a proximity event */
 static int proximity_bits[] = {
-        BTN_TOOL_PEN,
-        BTN_TOOL_RUBBER,
-        BTN_TOOL_BRUSH,
-        BTN_TOOL_PENCIL,
-        BTN_TOOL_AIRBRUSH,
-        BTN_TOOL_FINGER,
-        BTN_TOOL_MOUSE,
-        BTN_TOOL_LENS,
+    BTN_TOOL_PEN,
+    BTN_TOOL_RUBBER,
+    BTN_TOOL_BRUSH,
+    BTN_TOOL_PENCIL,
+    BTN_TOOL_AIRBRUSH,
+    BTN_TOOL_FINGER,
+    BTN_TOOL_MOUSE,
+    BTN_TOOL_LENS,
 };
 
 static int EvdevOn(DeviceIntPtr);
@@ -147,27 +147,27 @@ static int EvdevSwitchMode(ClientPtr client, DeviceIntPtr device, int mode)
     }
 
     switch (mode) {
-        case Absolute:
-            pEvdev->flags &= ~EVDEV_RELATIVE_MODE;
-            if (valuator_mask_fetch(pEvdev->old_vals, 0, &val))
-                valuator_mask_set(pEvdev->abs_vals, 0, val);
-            if (valuator_mask_fetch(pEvdev->old_vals, 1, &val))
-                valuator_mask_set(pEvdev->abs_vals, 1, val);
-            valuator_mask_zero(pEvdev->old_vals);
-            break;
+    case Absolute:
+        pEvdev->flags &= ~EVDEV_RELATIVE_MODE;
+        if (valuator_mask_fetch(pEvdev->old_vals, 0, &val))
+            valuator_mask_set(pEvdev->abs_vals, 0, val);
+        if (valuator_mask_fetch(pEvdev->old_vals, 1, &val))
+            valuator_mask_set(pEvdev->abs_vals, 1, val);
+        valuator_mask_zero(pEvdev->old_vals);
+        break;
 
-        case Relative:
-            pEvdev->flags |= EVDEV_RELATIVE_MODE;
-            if (valuator_mask_fetch(pEvdev->abs_vals, 0, &val))
-                valuator_mask_set(pEvdev->old_vals, 0, val);
-            if (valuator_mask_fetch(pEvdev->abs_vals, 1, &val))
-                valuator_mask_set(pEvdev->old_vals, 1, val);
-            valuator_mask_unset(pEvdev->abs_vals, 0);
-            valuator_mask_unset(pEvdev->abs_vals, 1);
-            break;
+    case Relative:
+        pEvdev->flags |= EVDEV_RELATIVE_MODE;
+        if (valuator_mask_fetch(pEvdev->abs_vals, 0, &val))
+            valuator_mask_set(pEvdev->old_vals, 0, val);
+        if (valuator_mask_fetch(pEvdev->abs_vals, 1, &val))
+            valuator_mask_set(pEvdev->old_vals, 1, val);
+        valuator_mask_unset(pEvdev->abs_vals, 0);
+        valuator_mask_unset(pEvdev->abs_vals, 1);
+        break;
 
-        default:
-            return XI_BadMode;
+    default:
+        return XI_BadMode;
     }
 
     return Success;
@@ -286,22 +286,22 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
     int code = ev->code + MIN_KEYCODE;
     EventQueuePtr pQueue;
 
-  /* Filter all repeated events from device.
-     We'll do softrepeat in the server, but only since 1.6 */
-	  if (value == 2){
+    /* Filter all repeated events from device.
+       We'll do softrepeat in the server, but only since 1.6 */
+    if (value == 2){
 	    return 1;
-	  }
+    }
 
-  if ((pQueue = EvdevNextInQueue(pInfo)))
-  {
-    pQueue->type = EV_QUEUE_KEY;
-    pQueue->detail.key = code;
-    pQueue->val = value;
-    return 1;
-  }
-  else{
-    return 0;
-  }
+    if ((pQueue = EvdevNextInQueue(pInfo)))
+    {
+        pQueue->type = EV_QUEUE_KEY;
+        pQueue->detail.key = code;
+        pQueue->val = value;
+        return 1;
+    }
+    else{
+        return 0;
+    }
 }
 
 /*
@@ -310,26 +310,26 @@ EvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value)
  */
 static int
 WrapEvdevQueueKbdEvent(InputInfoPtr pInfo, struct input_event *ev, int value, int code){
-  ev->code = code - MIN_KEYCODE;
-  return EvdevQueueKbdEvent(pInfo, ev, value);
+    ev->code = code - MIN_KEYCODE;
+    return EvdevQueueKbdEvent(pInfo, ev, value);
 }
 
 /* If the transmod "orig" key is pressed long enough and thus
    timed out, it returns 1. Otherwise 0 */
 static int ahmTimedOutP(long int lastSec, long int lastUsec, struct input_event *ev, int timeOut){
 
-  /* timeOut is not set */
-  if(timeOut == 0){
-    return 0;
-  }
+    /* timeOut is not set */
+    if(timeOut == 0){
+        return 0;
+    }
 
-  if( (ev->time.tv_sec - lastSec) * 1000
-      + (ev->time.tv_usec - lastUsec) / 1000
-      > timeOut){
-    return 1;
-  }else{
-    return 0;
-  }
+    if( (ev->time.tv_sec - lastSec) * 1000
+        + (ev->time.tv_usec - lastUsec) / 1000
+        > timeOut){
+        return 1;
+    }else{
+        return 0;
+    }
 }
 
 /*
@@ -339,212 +339,257 @@ static int ahmTimedOutP(long int lastSec, long int lastUsec, struct input_event 
 static void
 AhmStep2(InputInfoPtr pInfo, struct input_event *ev, int value, int code)
 {
-  EvdevPtr pEvdev = pInfo->private;
+    EvdevPtr pEvdev = pInfo->private;
 
-  int lastPressCode;
+    int lastPressCode;
 
-  unsigned int * transModTable = pEvdev->transModTable;
-  int * transModCount = pEvdev->transModCount;
+    unsigned int * transModTable = pEvdev->transModTable;
+    int * transModCount = pEvdev->transModCount;
 
-  lastPressCode = pEvdev->lastPressCode;
+    unsigned int * transModPressed = pEvdev->transModPressed;
+    Time * ahmTimePressed = pEvdev->ahmTimePressed;
+    
+    lastPressCode = pEvdev->lastPressCode;
 
-  if(value == 1){
-    pEvdev->lastPressCode = code;
-  }
+    if(value == 1){
+        pEvdev->lastPressCode = code;
+     }
 
-  if((value == 0)
-     && transModTable[lastPressCode]
-     && (lastPressCode != code)
-     && transModTable[code]
-     && (pEvdev->lastValue == 1)
-     && pEvdev->ahmFreezeTT){
-    /* Implements AhmFreezeTT */
-    transModCount[transModTable[lastPressCode]]--;
-    if(transModCount[transModTable[lastPressCode]] <= 0){
-      WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[lastPressCode]);
+    if((value == 0)
+       && transModTable[lastPressCode]
+       && (lastPressCode != code)
+       && transModTable[code]
+       && (pEvdev->lastValue == 1)
+       && pEvdev->ahmFreezeTT){
+        /* Implements AhmFreezeTT */
+        transModCount[transModTable[lastPressCode]]--;
+        if(transModCount[transModTable[lastPressCode]] <= 0){
+            WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[lastPressCode]);
+        }
+        if(transModCount[transModTable[lastPressCode]] < 0){
+            /*
+             * Usually this doesn't happen, but not never, either.
+             * Thus in fact this line is necessary.
+             */
+            transModCount[transModTable[lastPressCode]] = 0;
+        }
+         WrapEvdevQueueKbdEvent(pInfo, ev, 1, lastPressCode);
+        pEvdev->transModFreeze[lastPressCode] = 1;
+
+        /* Treat the latest keycode as usual in the following. */
     }
-    if(transModCount[transModTable[lastPressCode]] < 0){
-      /*
-       * Usually this doesn't happen, but not never, either.
-       * Thus in fact this line is necessary.
-       */
-      transModCount[transModTable[lastPressCode]] = 0;
-    }
-    WrapEvdevQueueKbdEvent(pInfo, ev, 1, lastPressCode);
-    pEvdev->transModFreeze[lastPressCode] = 1;
 
-    /* Treat the latest keycode as usual in the following. */
-  }
+    
+    
+    if(transModTable[code]){
+        if(pEvdev->transModFreeze[code] == 1){
+            /*
+             * When a freeze happens is explained above.
+             * If it's frozen, send the original key code.
+ v            */
+            WrapEvdevQueueKbdEvent(pInfo, ev, value, code);
+            pEvdev->transModFreeze[code] = 0;
+        }else{
+            /* Transmod, not frozen */
 
-  if(transModTable[code]){
-    if(pEvdev->transModFreeze[code] == 1){
-      /*
-       * When a freeze happens is explained above.
-       * If it's frozen, send the original key code.
-       */
-      WrapEvdevQueueKbdEvent(pInfo, ev, value, code);
-      pEvdev->transModFreeze[code] = 0;
+            if(value == 1){
+                /* press */
+
+                /*
+                 * Role of transModCount: suppose both key a and b are translated
+                 * to left shift. Press a, b, and release b. Then it should be 'B'.
+                 * But without transModCount, first the shift would be released,
+                 * so lower b be emitted.
+                 */
+                transModCount[transModTable[code]]++;
+                // WrapEvdevQueueKbdEvent(pInfo, ev, 1, transModTable[code]);
+                transModPressed[code] = 1;
+                ahmTimePressed[code] = GetTimeInMillis();
+
+                Time theTime = GetTimeInMillis();
+                
+                if(theTime - pEvdev->lastPlainPressTime > 225) {
+                    WrapEvdevQueueKbdEvent(pInfo, ev, 1, transModTable[code]);
+                    transModPressed[code] = 2;
+                } else {
+                    WrapEvdevQueueKbdEvent(pInfo, ev, 1, code);
+                    transModPressed[code] = 3;
+                }
+
+            }else{
+                /* release */
+                transModCount[transModTable[code]]--;
+                if(transModCount[transModTable[code]] <= 0
+                   && transModPressed[code] == 2){
+                    WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[code]);
+
+                }
+                if(transModCount[transModTable[code]] < 0){
+                    /*
+                     * Usually this doesn't happen, but not never, either.
+                     * Thus in fact this line is necessary.
+                     */
+                    transModCount[transModTable[code]] = 0;
+                }
+
+                if((transModPressed[code] == 3)
+                   | ((lastPressCode == code)
+                      && (ahmLastEventDevice == pInfo)
+                      && (ahmTimedOutP(pEvdev->lastEventTime.tv_sec,
+                                       pEvdev->lastEventTime.tv_usec,
+                                       ev, pEvdev->ahmTimeout) == 0)
+                       )){
+                    /*
+                     * Simple press and release of a transMod key, so
+                     * send the original code.
+                     */
+                    if(transModPressed[code] != 3){
+                        WrapEvdevQueueKbdEvent(pInfo, ev, 1, code);
+                    }
+                    WrapEvdevQueueKbdEvent(pInfo, ev, 0, code);
+                }
+
+                ahmTimePressed[code] = 0;
+                transModPressed[code] = 0;
+                   
+            }
+        }
     }else{
-      /* Transmod, not frozen */
+        /* Plain key */
+        if(value){
+            Time theTime = GetTimeInMillis();
+                
+            transModCount[code]++;
 
-      if(value == 1){
-	/* press */
+            /* int i; */
+            /* for(i=0; i<256; i++) { */
 
-	/*
-	 * Role of transModCount: suppose both key a and b are translated
-	 * to left shift. Press a, b, and release b. Then it should be 'B'.
-	 * But without transModCount, first the shift would be released,
-	 * so lower b be emitted.
-	 */
-	transModCount[transModTable[code]]++;
-	WrapEvdevQueueKbdEvent(pInfo, ev, 1, transModTable[code]);
-      }else{
-	/* release */
-	transModCount[transModTable[code]]--;
-	if(transModCount[transModTable[code]] <= 0){
-	  WrapEvdevQueueKbdEvent(pInfo, ev, 0, transModTable[code]);
-	}
-	if(transModCount[transModTable[code]] < 0){
-	  /*
-	   * Usually this doesn't happen, but not never, either.
-	   * Thus in fact this line is necessary.
-	   */
-	  transModCount[transModTable[code]] = 0;
-	}
+            /*     if(ahmTimePressed[i] > 0 */
+            /*        && transModPressed[i] == 1 */
+            /*        && (theTime - ahmTimePressed[i]) > 125) { */
+            /*         WrapEvdevQueueKbdEvent(pInfo, ev, 1, transModTable[i]); */
+            /*         transModPressed[i] = 2;                     */
+            /*     } else if((theTime - ahmTimePressed[i]) <= 125) { */
+            /*         WrapEvdevQueueKbdEvent(pInfo, ev, 1, i); */
+            /*         transModPressed[i] = 3; */
+            /*     } */
+            /* } */
+             
+            WrapEvdevQueueKbdEvent(pInfo, ev, 1, code);
+            pEvdev->lastPlainPressTime = GetTimeInMillis();
+        }else{
+            transModCount[code]--;
+            if(transModCount[code] <= 0){
+                WrapEvdevQueueKbdEvent(pInfo, ev, 0, code);
+            }
+            if(transModCount[code] < 0){
+                /*
+                 * Usually this doesn't happen, but not never, either.
+                 * Thus in fact this line is necessary.
+                 */
+                transModCount[code] = 0;
+            }
 
-	if((lastPressCode == code)
-	   && (ahmLastEventDevice == pInfo)
-	   && (ahmTimedOutP(pEvdev->lastEventTime.tv_sec,
-			    pEvdev->lastEventTime.tv_usec,
-			    ev, pEvdev->ahmTimeout) == 0)
-	   ){
-	  /*
-	   * Simple press and release of a transMod key, so
-	   * send the original code.
-	   */
-	  WrapEvdevQueueKbdEvent(pInfo, ev, 1, code);
-	  WrapEvdevQueueKbdEvent(pInfo, ev, 0, code);
-	}
-      }
+        }
     }
-  }else{
-    /* Plain key */
-    if(value){
-      transModCount[code]++;
-      WrapEvdevQueueKbdEvent(pInfo, ev, 1, code);
-    }else{
-      transModCount[code]--;
-      if(transModCount[code] <= 0){
-	WrapEvdevQueueKbdEvent(pInfo, ev, 0, code);
-      }
-      if(transModCount[code] < 0){
-	/*
-	 * Usually this doesn't happen, but not never, either.
-	 * Thus in fact this line is necessary.
-	 */
-	transModCount[code] = 0;
-      }
-
-    }
-  }
-  pEvdev->lastValue = value;
-  ahmLastEventDevice = pInfo;
+    pEvdev->lastValue = value;
+    ahmLastEventDevice = pInfo;
 }
 
 /* Handles reset and ahmDelay before AhmStep2 */
 static void
 AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
-  /*
-   * Meaning of ev->code is described in linux/input.h, "Keys and buttons"
-   * section.
-   * code + MIN_KEYCODE is the value used by X, listed in
-   * /usr/share/X11/xkb/keycodes/evdev.
-   *
-   * Meaning of value: 0: release, 1: press, 2: autorepeat.
-   * Notice that autorepeat is _sent by kernel input driver_. Don't
-   * confuse it with X server autorepeat which is set by xset command.
-   */
-  int code = ev->code + MIN_KEYCODE;
-  EvdevPtr pEvdev = pInfo->private;
-
-  int* ahmDelayedCode = pEvdev->ahmDelayedCode;
-
-  /*
-   * Autorepeat has to be filtered for ahm, too.
-   * See also the comment in EvdevQueueKbdEvent.
-   * Early return will also be implemented in upstream 2.7.0.
-   */
-  if(value == 2){
-    return;
-  }
-
-  /* Reset part */
-  if (pEvdev->ahmResetTime &&
-      (ev->time.tv_sec - pEvdev->lastEventTime.tv_sec >
-       pEvdev->ahmResetTime)){
     /*
-     * (more than) ahmResetTime (sec) has elapsed since the last press event.
-     * Release all translated modifiers, and reset transModCount and
-     * freeze table.
+     * Meaning of ev->code is described in linux/input.h, "Keys and buttons"
+     * section.
+     * code + MIN_KEYCODE is the value used by X, listed in
+     * /usr/share/X11/xkb/keycodes/evdev.
+     *
+     * Meaning of value: 0: release, 1: press, 2: autorepeat.
+     * Notice that autorepeat is _sent by kernel input driver_. Don't
+     * confuse it with X server autorepeat which is set by xset command.
      */
-    int c;
-    for(c = MIN_KEYCODE; c < 256; c++){
+    int code = ev->code + MIN_KEYCODE;
+    EvdevPtr pEvdev = pInfo->private;
 
-      if(pEvdev->transModTable[c]){
-	/*
-	 * I think release of transModTable[c] suffices,
-	 * and release of c is not necessary.
-	 */
-	WrapEvdevQueueKbdEvent(pInfo, ev, 0, pEvdev->transModTable[c]);
-      }
-      pEvdev->transModCount[c] = 0;
-      pEvdev->transModFreeze[c] = 0;
-    }
-    pEvdev->ahmDelayedKeys = 0;
-  }
+    int* ahmDelayedCode = pEvdev->ahmDelayedCode;
 
-  /* Delay part. */
+    /*
+     * Autorepeat has to be filtered for ahm, too.
+     * See also the comment in EvdevQueueKbdEvent.
+     * Early return will also be implemented in upstream 2.7.0.
+     */
+    if(value == 2){
+        return;
+    }
 
-  /* How many keys are already delayed? */
-  switch(pEvdev->ahmDelayedKeys){
-  case 0:
-    if(pEvdev->ahmDelayTable[code] && value){
-      ahmDelayedCode[0] = code;
-      pEvdev->ahmDelayedKeys = 1;
-    }else{
-      AhmStep2(pInfo, ev, value, code);
-    }
-    break;
-  case 1:
-    if(value == 0){
-      /* Release. Replay it. */
-      AhmStep2(pInfo, ev, 1, ahmDelayedCode[0]);
+    /* Reset part */
+    if (pEvdev->ahmResetTime &&
+        (ev->time.tv_sec - pEvdev->lastEventTime.tv_sec >
+         pEvdev->ahmResetTime)){
+        /*
+         * (more than) ahmResetTime (sec) has elapsed since the last press event.
+         * Release all translated modifiers, and reset transModCount and
+         * freeze table.
+         */
+        int c;
+        for(c = MIN_KEYCODE; c < 256; c++){
 
-      AhmStep2(pInfo, ev, 0, code);
-      pEvdev->ahmDelayedKeys = 0;
-    }else{
-      /* Another key is pressed. Queue this second event, too.*/
-      ahmDelayedCode[1] = code;
-      pEvdev->ahmDelayedKeys = 2;
+            if(pEvdev->transModTable[c]){
+                /*
+                 * I think release of transModTable[c] suffices,
+                 * and release of c is not necessary.
+                 */
+                WrapEvdevQueueKbdEvent(pInfo, ev, 0, pEvdev->transModTable[c]);
+            }
+            pEvdev->transModCount[c] = 0;
+            pEvdev->transModFreeze[c] = 0;
+        }
+        pEvdev->ahmDelayedKeys = 0;
     }
-    break;
-  case 2:
-    pEvdev->ahmDelayedKeys = 0;
-    if( (value == 0) && (code == ahmDelayedCode[0]) ){
-      /* Gist of ahmDelay. */
-      AhmStep2(pInfo, ev, 1, code);
-      AhmStep2(pInfo, ev, 0, code);
-      AhmStep2(pInfo, ev, 1, ahmDelayedCode[1]);
-    }else{
-      /* Nothing special. Replay all, and bye. */
-      AhmStep2(pInfo, ev, 1, ahmDelayedCode[0]);
-      AhmStep2(pInfo, ev, 1, ahmDelayedCode[1]);
-      AhmStep2(pInfo, ev, value, code);
+
+    /* Delay part. */
+
+    /* How many keys are already delayed? */
+    switch(pEvdev->ahmDelayedKeys){
+    case 0:
+        if(pEvdev->ahmDelayTable[code] && value){
+            ahmDelayedCode[0] = code;
+            pEvdev->ahmDelayedKeys = 1;
+        }else{
+            AhmStep2(pInfo, ev, value, code);
+        }
+        break;
+    case 1:
+        if(value == 0){
+            /* Release. Replay it. */
+            AhmStep2(pInfo, ev, 1, ahmDelayedCode[0]);
+
+            AhmStep2(pInfo, ev, 0, code);
+            pEvdev->ahmDelayedKeys = 0;
+        }else{
+            /* Another key is pressed. Queue this second event, too.*/
+            ahmDelayedCode[1] = code;
+            pEvdev->ahmDelayedKeys = 2;
+        }
+        break;
+    case 2:
+        pEvdev->ahmDelayedKeys = 0;
+        if( (value == 0) && (code == ahmDelayedCode[0]) ){
+            /* Gist of ahmDelay. */
+            AhmStep2(pInfo, ev, 1, code);
+            AhmStep2(pInfo, ev, 0, code);
+            AhmStep2(pInfo, ev, 1, ahmDelayedCode[1]);
+        }else{
+            /* Nothing special. Replay all, and bye. */
+            AhmStep2(pInfo, ev, 1, ahmDelayedCode[0]);
+            AhmStep2(pInfo, ev, 1, ahmDelayedCode[1]);
+            AhmStep2(pInfo, ev, value, code);
+        }
+        break;
     }
-    break;
-  }
-  pEvdev->lastEventTime.tv_sec  = ev->time.tv_sec;
-  pEvdev->lastEventTime.tv_usec = ev->time.tv_usec;
+    pEvdev->lastEventTime.tv_sec  = ev->time.tv_sec;
+    pEvdev->lastEventTime.tv_usec = ev->time.tv_usec;
 }
 
 /*
@@ -562,73 +607,73 @@ AhmStep1(InputInfoPtr pInfo, struct input_event *ev, int value){
  * Simple sleeping doesn't work; it simply blocks.
  */
 static void AhmWakeupHandler(pointer data, __attribute__ ((unused)) int ii,
-		      pointer __attribute__ ((unused)) LastSelectMask){
-  InputInfoPtr pInfo = (InputInfoPtr) data;
-  EvdevPtr  pEvdev = (EvdevPtr) pInfo->private;
-  int ms;
+                             pointer __attribute__ ((unused)) LastSelectMask){
+    InputInfoPtr pInfo = (InputInfoPtr) data;
+    EvdevPtr  pEvdev = (EvdevPtr) pInfo->private;
+    int ms;
 
-  if(pEvdev->ahmQueueTop != pEvdev->ahmQueueBottom){
-    ms = pEvdev->ahmTimerExpires - GetTimeInMillis();
-    if(ms <= 0){
-      int i, lim;
-      unsigned int lastKey = 0;
+    if(pEvdev->ahmQueueTop != pEvdev->ahmQueueBottom){
+        ms = pEvdev->ahmTimerExpires - GetTimeInMillis();
+        if(ms <= 0){
+            int i, lim;
+            unsigned int lastKey = 0;
 
-      lim = (pEvdev->ahmQueueTop < pEvdev->ahmQueueBottom) ?
-        pEvdev->ahmQueueBottom : pEvdev->ahmQueueBottom + AHM_QUEUE_SIZE;
+            lim = (pEvdev->ahmQueueTop < pEvdev->ahmQueueBottom) ?
+                pEvdev->ahmQueueBottom : pEvdev->ahmQueueBottom + AHM_QUEUE_SIZE;
 
-      for (i = pEvdev->ahmQueueTop; i < lim; i++){
-	if((pEvdev->transModTable[pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE]]
-	    == lastKey) && lastKey){
-          pEvdev->ahmTimerExpires = GetTimeInMillis() +
-	    pEvdev->ahmPaddingInterval;
-	  break;
-	}else
-	  xf86PostKeyboardEvent(pInfo->dev,
-				pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE],
-				pEvdev->ahmQueueValues[i % AHM_QUEUE_SIZE]);
-	lastKey = pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE];
-      }
-      pEvdev->ahmQueueTop = i % AHM_QUEUE_SIZE;
+            for (i = pEvdev->ahmQueueTop; i < lim; i++){
+                if((pEvdev->transModTable[pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE]]
+                    == lastKey) && lastKey){
+                    pEvdev->ahmTimerExpires = GetTimeInMillis() +
+                        pEvdev->ahmPaddingInterval;
+                    break;
+                }else
+                    xf86PostKeyboardEvent(pInfo->dev,
+                                          pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE],
+                                          pEvdev->ahmQueueValues[i % AHM_QUEUE_SIZE]);
+                lastKey = pEvdev->ahmQueueKeys[i % AHM_QUEUE_SIZE];
+            }
+            pEvdev->ahmQueueTop = i % AHM_QUEUE_SIZE;
+        }
     }
-  }
 }
 
 
 static void AhmBlockHandler(pointer data,
-		     struct timeval **waitTime,
-		     __attribute__ ((unused)) pointer LastSelectMask)
+                            struct timeval **waitTime,
+                            __attribute__ ((unused)) pointer LastSelectMask)
 {
-  InputInfoPtr    pInfo = (InputInfoPtr) data;
-  EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
-  int             ms;
+    InputInfoPtr    pInfo = (InputInfoPtr) data;
+    EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
+    int             ms;
 
-  if(pEvdev->ahmQueueBottom != pEvdev->ahmQueueTop){
-    ms = pEvdev->ahmTimerExpires - GetTimeInMillis();
-    if(ms <= 0){
-      ms = 0;
+    if(pEvdev->ahmQueueBottom != pEvdev->ahmQueueTop){
+        ms = pEvdev->ahmTimerExpires - GetTimeInMillis();
+        if(ms <= 0){
+            ms = 0;
+        }
+        AdjustWaitForDelay(waitTime, ms);
     }
-    AdjustWaitForDelay(waitTime, ms);
-  }
 }
 
 static void AhmRegisterTimers(InputInfoPtr pInfo){
-  EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
-  if(!pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
-    return;
-  }
-  RegisterBlockAndWakeupHandlers(AhmBlockHandler,
-				 AhmWakeupHandler,
-				 (pointer)pInfo);
+    EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
+    if(!pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
+        return;
+    }
+    RegisterBlockAndWakeupHandlers(AhmBlockHandler,
+                                   AhmWakeupHandler,
+                                   (pointer)pInfo);
 }
 
 static void AhmFinalise(InputInfoPtr pInfo){
-  EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
-  if(!pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
-    return;
-  }
-  RemoveBlockAndWakeupHandlers(AhmBlockHandler,
-			       AhmWakeupHandler,
-			       (pointer)pInfo);
+    EvdevPtr        pEvdev= (EvdevPtr) pInfo->private;
+    if(!pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
+        return;
+    }
+    RemoveBlockAndWakeupHandlers(AhmBlockHandler,
+                                 AhmWakeupHandler,
+                                 (pointer)pInfo);
 }
 
 void
@@ -772,10 +817,10 @@ EvdevProcessValuators(InputInfoPtr pInfo)
     int val;
 
     if (pEvdev->abs_vals) {
-            if (valuator_mask_fetch(pEvdev->abs_vals, 0, &val))
-                    valuator_mask_set(pEvdev->old_vals, 0, val);
-            if (valuator_mask_fetch(pEvdev->abs_vals, 1, &val))
-                    valuator_mask_set(pEvdev->old_vals, 1, val);
+        if (valuator_mask_fetch(pEvdev->abs_vals, 0, &val))
+            valuator_mask_set(pEvdev->old_vals, 0, val);
+        if (valuator_mask_fetch(pEvdev->abs_vals, 1, &val))
+            valuator_mask_set(pEvdev->old_vals, 1, val);
     }
 
     /* Apply transformations on relative coordinates */
@@ -954,25 +999,25 @@ EvdevProcessRelativeMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
     value = ev->value;
 
     switch (ev->code) {
-        default:
-            /* Ignore EV_REL events if we never set up for them. */
-            if (!(pEvdev->flags & EVDEV_RELATIVE_EVENTS) &&
-                    ev->code != REL_WHEEL && ev->code != REL_DIAL &&
-                    ev->code != REL_HWHEEL)
-                return;
+    default:
+        /* Ignore EV_REL events if we never set up for them. */
+        if (!(pEvdev->flags & EVDEV_RELATIVE_EVENTS) &&
+            ev->code != REL_WHEEL && ev->code != REL_DIAL &&
+            ev->code != REL_HWHEEL)
+            return;
 
-            /* Handle mouse wheel emulation */
-            if (EvdevWheelEmuFilterMotion(pInfo, ev))
-                return;
+        /* Handle mouse wheel emulation */
+        if (EvdevWheelEmuFilterMotion(pInfo, ev))
+            return;
 
-            pEvdev->rel_queued = 1;
-            map = pEvdev->rel_axis_map[ev->code];
+        pEvdev->rel_queued = 1;
+        map = pEvdev->rel_axis_map[ev->code];
 
-            if (valuator_mask_isset(pEvdev->rel_vals, map))
-                value += valuator_mask_get(pEvdev->rel_vals, map);
+        if (valuator_mask_isset(pEvdev->rel_vals, map))
+            value += valuator_mask_get(pEvdev->rel_vals, map);
 
-            valuator_mask_set(pEvdev->rel_vals, map, value);
-            break;
+        valuator_mask_set(pEvdev->rel_vals, map, value);
+        break;
     }
 }
 
@@ -991,20 +1036,20 @@ EvdevProcessTouch(InputInfoPtr pInfo)
 
     switch(pEvdev->slots[slot].state)
     {
-        case SLOTSTATE_EMPTY:
-            return;
-        case SLOTSTATE_CLOSE:
-            type = XI_TouchEnd;
-            pEvdev->slots[slot].state = SLOTSTATE_EMPTY;
-            break;
-        case SLOTSTATE_OPEN:
-            type = XI_TouchBegin;
-            pEvdev->slots[slot].state = SLOTSTATE_UPDATE;
-            break;
-        case SLOTSTATE_UPDATE:
-        default:
-            type = XI_TouchUpdate;
-            break;
+    case SLOTSTATE_EMPTY:
+        return;
+    case SLOTSTATE_CLOSE:
+        type = XI_TouchEnd;
+        pEvdev->slots[slot].state = SLOTSTATE_EMPTY;
+        break;
+    case SLOTSTATE_OPEN:
+        type = XI_TouchBegin;
+        pEvdev->slots[slot].state = SLOTSTATE_UPDATE;
+        break;
+    case SLOTSTATE_UPDATE:
+    default:
+        type = XI_TouchUpdate;
+        break;
     }
 
     EvdevSwapAbsValuators(pEvdev, pEvdev->mt_mask);
@@ -1067,11 +1112,11 @@ EvdevProcessTouchEvent(InputInfoPtr pInfo, struct input_event *ev)
     {
         int slot_index = last_mt_vals_slot(pEvdev);
         if (slot_index < 0) {
-                    LogMessageVerbSigSafe(X_WARNING, 0,
-                                          "%s: Invalid slot index %d, touch events may be incorrect.\n",
-                                          pInfo->name,
-                                          slot_index);
-                    return;
+            LogMessageVerbSigSafe(X_WARNING, 0,
+                                  "%s: Invalid slot index %d, touch events may be incorrect.\n",
+                                  pInfo->name,
+                                  slot_index);
+            return;
         }
 
         pEvdev->slots[slot_index].dirty = 1;
@@ -1116,7 +1161,7 @@ EvdevProcessAbsoluteMotionEvent(InputInfoPtr pInfo, struct input_event *ev)
      * which is required by wheel emulation */
     map = pEvdev->abs_axis_map[ev->code];
     if (map < 2)
-            valuator_mask_set(pEvdev->abs_vals, map, value);
+        valuator_mask_set(pEvdev->abs_vals, map, value);
 
     if (EvdevWheelEmuFilterMotion(pInfo, ev))
         return;
@@ -1168,31 +1213,31 @@ EvdevProcessKeyEvent(InputInfoPtr pInfo, struct input_event *ev)
     }
 
     switch (ev->code) {
-        case BTN_TOUCH:
-            /* For devices that have but don't use proximity, use
-             * BTN_TOUCH as the proximity notifier */
-            if (!pEvdev->use_proximity)
-                pEvdev->in_proximity = value ? ev->code : 0;
-            /* When !pEvdev->use_proximity, we don't report
-             * proximity events to the X server. However, we
-             * still want to keep track if one is in proximity or
-             * not. This is especially important for touchpad
-             * who report proximity information to the computer
-             * (but it is not sent to X) and who might send unreliable
-             * position information when not in_proximity.
-             */
+    case BTN_TOUCH:
+        /* For devices that have but don't use proximity, use
+         * BTN_TOUCH as the proximity notifier */
+        if (!pEvdev->use_proximity)
+            pEvdev->in_proximity = value ? ev->code : 0;
+                /* When !pEvdev->use_proximity, we don't report
+                 * proximity events to the X server. However, we
+                 * still want to keep track if one is in proximity or
+                 * not. This is especially important for touchpad
+                 * who report proximity information to the computer
+                 * (but it is not sent to X) and who might send unreliable
+                 * position information when not in_proximity.
+                 */
 
-            if (!(pEvdev->flags & (EVDEV_TOUCHSCREEN | EVDEV_TABLET)) ||
-                pEvdev->mt_mask)
-                break;
-            /* Treat BTN_TOUCH from devices that only have BTN_TOUCH as
-             * BTN_LEFT. */
-            ev->code = BTN_LEFT;
-            /* Intentional fallthrough! */
+                if (!(pEvdev->flags & (EVDEV_TOUCHSCREEN | EVDEV_TABLET)) ||
+                    pEvdev->mt_mask)
+                    break;
+                /* Treat BTN_TOUCH from devices that only have BTN_TOUCH as
+                 * BTN_LEFT. */
+                ev->code = BTN_LEFT;
+                /* Intentional fallthrough! */
 
-        default:
-            EvdevProcessButtonEvent(pInfo, ev);
-            break;
+    default:
+        EvdevProcessButtonEvent(pInfo, ev);
+        break;
     }
 }
 
@@ -1239,14 +1284,14 @@ EvdevPostProximityEvents(InputInfoPtr pInfo, int which)
 
     for (i = 0; pEvdev->prox_queued && i < pEvdev->num_queue; i++) {
         switch (pEvdev->queue[i].type) {
-            case EV_QUEUE_KEY:
-            case EV_QUEUE_BTN:
-            case EV_QUEUE_TOUCH:
-                break;
-            case EV_QUEUE_PROXIMITY:
-                if (pEvdev->queue[i].val == which)
-                    xf86PostProximityEvent(pInfo->dev, which, 0, 0);
-                break;
+        case EV_QUEUE_KEY:
+        case EV_QUEUE_BTN:
+        case EV_QUEUE_TOUCH:
+            break;
+        case EV_QUEUE_PROXIMITY:
+            if (pEvdev->queue[i].val == which)
+                xf86PostProximityEvent(pInfo->dev, which, 0, 0);
+            break;
         }
     }
 }
@@ -1263,18 +1308,18 @@ static void EvdevPostQueuedEvents(InputInfoPtr pInfo)
     for (i = 0; i < pEvdev->num_queue; i++) {
         switch (pEvdev->queue[i].type) {
         case EV_QUEUE_KEY:
-	  /*
-	   * ahm:
-	   * In the original code, these key events are
-	   * dispatched with xf86PostKeyboardEvent here.
-	   * In ahm, they're queued, and sent asynchronously using timer.
-	   * Actual flushing is done in AhmWakeupHandler.
-	   */
-	  pEvdev->ahmQueueKeys[ind] = pEvdev->queue[i].detail.key;
-	  pEvdev->ahmQueueValues[ind] = pEvdev->queue[i].val;
-	  ind++;
-	  ind %= AHM_QUEUE_SIZE;
-	  break;
+            /*
+             * ahm:
+             * In the original code, these key events are
+             * dispatched with xf86PostKeyboardEvent here.
+             * In ahm, they're queued, and sent asynchronously using timer.
+             * Actual flushing is done in AhmWakeupHandler.
+             */
+            pEvdev->ahmQueueKeys[ind] = pEvdev->queue[i].detail.key;
+            pEvdev->ahmQueueValues[ind] = pEvdev->queue[i].val;
+            ind++;
+            ind %= AHM_QUEUE_SIZE;
+            break;
 
         case EV_QUEUE_BTN:
             if (Evdev3BEmuFilterEvent(pInfo,
@@ -1284,7 +1329,7 @@ static void EvdevPostQueuedEvents(InputInfoPtr pInfo)
 
             if (pEvdev->abs_queued && pEvdev->in_proximity) {
                 xf86PostButtonEvent(pInfo->dev, Absolute, pEvdev->queue[i].detail.key,
-                                     pEvdev->queue[i].val, 0, 0);
+                                    pEvdev->queue[i].val, 0, 0);
 
             } else
                 xf86PostButtonEvent(pInfo->dev, Relative, pEvdev->queue[i].detail.key,
@@ -1300,8 +1345,8 @@ static void EvdevPostQueuedEvents(InputInfoPtr pInfo)
         }
     }
     if(pEvdev->flags & EVDEV_KEYBOARD_EVENTS){
-      pEvdev->ahmTimerExpires = GetTimeInMillis();
-      pEvdev->ahmQueueBottom = ind;
+        pEvdev->ahmTimerExpires = GetTimeInMillis();
+        pEvdev->ahmQueueBottom = ind;
     }
 }
 
@@ -1354,18 +1399,18 @@ static void
 EvdevProcessEvent(InputInfoPtr pInfo, struct input_event *ev)
 {
     switch (ev->type) {
-        case EV_REL:
-            EvdevProcessRelativeMotionEvent(pInfo, ev);
-            break;
-        case EV_ABS:
-            EvdevProcessAbsoluteMotionEvent(pInfo, ev);
-            break;
-        case EV_KEY:
-            EvdevProcessKeyEvent(pInfo, ev);
-            break;
-        case EV_SYN:
-            EvdevProcessSyncEvent(pInfo, ev);
-            break;
+    case EV_REL:
+        EvdevProcessRelativeMotionEvent(pInfo, ev);
+        break;
+    case EV_ABS:
+        EvdevProcessAbsoluteMotionEvent(pInfo, ev);
+        break;
+    case EV_KEY:
+        EvdevProcessKeyEvent(pInfo, ev);
+        break;
+    case EV_SYN:
+        EvdevProcessSyncEvent(pInfo, ev);
+        break;
     }
 }
 
@@ -1421,7 +1466,7 @@ EvdevReadInput(InputInfoPtr pInfo)
                 xf86RemoveEnabledDevice(pInfo);
             else if (rc != -EAGAIN)
                 LogMessageVerbSigSafe(X_ERROR, 0, "%s: Read error: %s\n", pInfo->name,
-                                       strerror(-rc));
+                                      strerror(-rc));
             break;
         } else if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
             if (pEvdev->mtdev)
@@ -1484,7 +1529,7 @@ EvdevAddKeyClass(DeviceIntPtr device)
 {
     int rc = Success;
     XkbRMLVOSet rmlvo = {0},
-                defaults;
+        defaults;
     InputInfoPtr pInfo;
 
     pInfo = device->public.devicePrivate;
@@ -1534,11 +1579,11 @@ is_blacklisted_axis(int axis)
 {
     switch(axis)
     {
-        case ABS_MT_SLOT:
-        case ABS_MT_TRACKING_ID:
-            return TRUE;
-        default:
-            return FALSE;
+    case ABS_MT_SLOT:
+    case ABS_MT_TRACKING_ID:
+        return TRUE;
+    default:
+        return FALSE;
     }
 }
 
@@ -1763,7 +1808,7 @@ EvdevAddAbsValuatorClass(DeviceIntPtr device, int num_scroll_axes)
             if (mt_axis_mappings[j].code == axis)
                 mt_axis_mappings[j].mapping = mapping;
             else if (mt_axis_mappings[j].mt_code == axis &&
-                    mt_axis_mappings[j].needs_mapping)
+                     mt_axis_mappings[j].needs_mapping)
                 mapping = mt_axis_mappings[j].mapping;
         }
         pEvdev->abs_axis_map[axis] = mapping;
@@ -1855,7 +1900,7 @@ EvdevAddAbsValuatorClass(DeviceIntPtr device, int num_scroll_axes)
 
         for (j = 0; j < ArrayLength(mt_axis_mappings); j++)
             if (mt_axis_mappings[j].mt_code == axis &&
-                    mt_axis_mappings[j].needs_mapping)
+                mt_axis_mappings[j].needs_mapping)
             {
                 skip = TRUE;
                 break;
@@ -2032,7 +2077,7 @@ EvdevAddRelValuatorClass(DeviceIntPtr device, int num_scroll_axes)
        EvdevInitAbsValuators if possible */
     if (num_axes < 1 &&
         (num_scroll_axes == 0 || pEvdev->flags & EVDEV_ABSOLUTE_EVENTS))
-            goto out;
+        goto out;
 
     num_axes += num_scroll_axes;
 
@@ -2068,7 +2113,7 @@ EvdevAddRelValuatorClass(DeviceIntPtr device, int num_scroll_axes)
 
     if (!InitPtrFeedbackClassDeviceStruct(device, EvdevPtrCtrlProc)) {
         xf86IDrvMsg(pInfo, X_ERROR, "failed to initialize pointer feedback class "
-                "device.\n");
+                    "device.\n");
         goto out;
     }
 
@@ -2262,9 +2307,9 @@ EvdevInit(DeviceIntPtr device)
     pEvdev = pInfo->private;
 
     if (pEvdev->flags & EVDEV_KEYBOARD_EVENTS)
-	EvdevAddKeyClass(device);
+        EvdevAddKeyClass(device);
     if (pEvdev->flags & EVDEV_BUTTON_EVENTS)
-	EvdevAddButtonClass(device);
+        EvdevAddButtonClass(device);
 
     /* We don't allow relative and absolute axes on the same device. The
      * reason is that some devices (MS Optical Desktop 2000) register both
@@ -2348,17 +2393,17 @@ EvdevProc(DeviceIntPtr device, int what)
     switch (what)
     {
     case DEVICE_INIT:
-	return EvdevInit(device);
+        return EvdevInit(device);
 
     case DEVICE_ON:
         return EvdevOn(device);
 
     case DEVICE_OFF:
-      if (pEvdev->flags & EVDEV_INITIALIZED){
-	EvdevMBEmuFinalize(pInfo);
-	Evdev3BEmuFinalize(pInfo);
-	AhmFinalise(pInfo);
-      }
+        if (pEvdev->flags & EVDEV_INITIALIZED){
+            EvdevMBEmuFinalize(pInfo);
+            Evdev3BEmuFinalize(pInfo);
+            AhmFinalise(pInfo);
+        }
         if (pInfo->fd != -1)
         {
             EvdevGrabDevice(pInfo, 0, 1);
@@ -2367,15 +2412,15 @@ EvdevProc(DeviceIntPtr device, int what)
         }
         pEvdev->min_maj = 0;
         pEvdev->flags &= ~EVDEV_INITIALIZED;
-	device->public.on = FALSE;
-	break;
+        device->public.on = FALSE;
+        break;
 
     case DEVICE_CLOSE:
-	xf86IDrvMsg(pInfo, X_INFO, "Close\n");
+        xf86IDrvMsg(pInfo, X_INFO, "Close\n");
         EvdevCloseDevice(pInfo);
         EvdevFreeMasks(pEvdev);
         pEvdev->min_maj = 0;
-	break;
+        break;
 
     default:
         return BadValue;
@@ -2487,7 +2532,7 @@ EvdevProbe(InputInfoPtr pInfo)
        - unset: do the normal thing.
        - TRUE: explicitly ignore them.
        - FALSE: unignore axes, use them at all cost if they're present.
-     */
+    */
     if (xf86FindOption(pInfo->options, "IgnoreRelativeAxes"))
     {
         if (xf86SetBoolOption(pInfo->options, "IgnoreRelativeAxes", FALSE))
@@ -2499,7 +2544,7 @@ EvdevProbe(InputInfoPtr pInfo)
     if (xf86FindOption(pInfo->options, "IgnoreAbsoluteAxes"))
     {
         if (xf86SetBoolOption(pInfo->options, "IgnoreAbsoluteAxes", FALSE))
-           ignore_abs = TRUE;
+            ignore_abs = TRUE;
         else
             pEvdev->flags |= EVDEV_UNIGNORE_ABSOLUTE;
     }
@@ -2525,8 +2570,8 @@ EvdevProbe(InputInfoPtr pInfo)
     }
 
     has_lmr = libevdev_has_event_code(pEvdev->dev, EV_KEY, BTN_LEFT) ||
-              libevdev_has_event_code(pEvdev->dev, EV_KEY, BTN_MIDDLE) ||
-              libevdev_has_event_code(pEvdev->dev, EV_KEY, BTN_RIGHT);
+        libevdev_has_event_code(pEvdev->dev, EV_KEY, BTN_MIDDLE) ||
+        libevdev_has_event_code(pEvdev->dev, EV_KEY, BTN_RIGHT);
 
     if (num_buttons)
     {
@@ -2641,10 +2686,10 @@ EvdevProbe(InputInfoPtr pInfo)
                 }
             } else if (!(libevdev_has_event_code(pEvdev->dev, EV_REL, REL_X) &&
                          libevdev_has_event_code(pEvdev->dev, EV_REL, REL_Y)) && has_lmr) {
-                    /* some touchscreens use BTN_LEFT rather than BTN_TOUCH */
-                    xf86IDrvMsg(pInfo, X_PROBED, "Found absolute touchscreen\n");
-                    pEvdev->flags |= EVDEV_TOUCHSCREEN;
-                    pEvdev->flags |= EVDEV_BUTTON_EVENTS;
+                /* some touchscreens use BTN_LEFT rather than BTN_TOUCH */
+                xf86IDrvMsg(pInfo, X_PROBED, "Found absolute touchscreen\n");
+                pEvdev->flags |= EVDEV_TOUCHSCREEN;
+                pEvdev->flags |= EVDEV_BUTTON_EVENTS;
             }
         } else {
             if (!libevdev_has_event_code(pEvdev->dev, EV_ABS, ABS_MT_POSITION_X) ||
@@ -2680,8 +2725,8 @@ EvdevProbe(InputInfoPtr pInfo)
         str = xf86CheckStrOption(pInfo->options, "Calibration", NULL);
         if (str) {
             num_calibration = sscanf(str, "%d %d %d %d",
-                    &calibration[0], &calibration[1],
-                    &calibration[2], &calibration[3]);
+                                     &calibration[0], &calibration[1],
+                                     &calibration[2], &calibration[3]);
             free(str);
             if (num_calibration == 4)
                 EvdevSetCalibration(pInfo, num_calibration, calibration);
@@ -2694,23 +2739,23 @@ EvdevProbe(InputInfoPtr pInfo)
 
     if (has_rel_axes || has_abs_axes || num_buttons) {
         pInfo->flags |= XI86_SEND_DRAG_EVENTS;
-	if (pEvdev->flags & EVDEV_TOUCHPAD) {
-	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as touchpad\n");
-	    pInfo->type_name = XI_TOUCHPAD;
-	    pEvdev->use_proximity = 0;
-	} else if (pEvdev->flags & EVDEV_TABLET) {
-	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as tablet\n");
-	    pInfo->type_name = XI_TABLET;
+        if (pEvdev->flags & EVDEV_TOUCHPAD) {
+            xf86IDrvMsg(pInfo, X_INFO, "Configuring as touchpad\n");
+            pInfo->type_name = XI_TOUCHPAD;
+            pEvdev->use_proximity = 0;
+        } else if (pEvdev->flags & EVDEV_TABLET) {
+            xf86IDrvMsg(pInfo, X_INFO, "Configuring as tablet\n");
+            pInfo->type_name = XI_TABLET;
         } else if (pEvdev->flags & EVDEV_TOUCHSCREEN) {
             xf86IDrvMsg(pInfo, X_INFO, "Configuring as touchscreen\n");
             pInfo->type_name = XI_TOUCHSCREEN;
-	} else {
+        } else {
             if (!libevdev_has_event_code(pEvdev->dev, EV_REL, REL_X) ||
                 !libevdev_has_event_code(pEvdev->dev, EV_REL, REL_Y))
                 EvdevForceXY(pInfo, Relative);
-	    xf86IDrvMsg(pInfo, X_INFO, "Configuring as mouse\n");
-	    pInfo->type_name = XI_MOUSE;
-	}
+            xf86IDrvMsg(pInfo, X_INFO, "Configuring as mouse\n");
+            pInfo->type_name = XI_MOUSE;
+        }
 
         rc = 0;
     }
@@ -2995,7 +3040,7 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 
     /* Overwrite type_name with custom-defined one (#62831).
        Note: pInfo->type_name isn't freed so we need to manually do this
-     */
+    */
     pEvdev->type_name = xf86SetStrOption(pInfo->options,
                                          "TypeName",
                                          pInfo->type_name);
@@ -3010,116 +3055,119 @@ EvdevPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
     }
 
     if (pEvdev->flags & EVDEV_KEYBOARD_EVENTS)
-      {
-	/* parse ahm options */
-	char *str, *toFree;
-	char *next = NULL;
-	char *end = NULL;
-	int fromCode = 0, toCode = 0;
+    {
+        /* parse ahm options */
+        char *str, *toFree;
+        char *next = NULL;
+        char *end = NULL;
+        int fromCode = 0, toCode = 0;
 
-	pEvdev->ahmQueueTop = 0;
-	pEvdev->ahmQueueBottom = 0;
+        pEvdev->ahmQueueTop = 0;
+        pEvdev->ahmQueueBottom = 0;
 
-	pEvdev->lastPressCode = 0;
-	pEvdev->lastValue = 0;
+        pEvdev->lastPressCode = 0;
+        pEvdev->lastValue = 0;
+        pEvdev->lastPlainPressTime = 0;
 
-	for(fromCode = 0; fromCode < 256; fromCode++){
-	  pEvdev->transModCount[fromCode] = 0;
-	  pEvdev->transModTable[fromCode] = 0;
-	  pEvdev->transModFreeze[fromCode] = 0;
-	  pEvdev->ahmDelayTable[fromCode] = 0;
-	}
+        for(fromCode = 0; fromCode < 256; fromCode++){
+            pEvdev->transModCount[fromCode] = 0;
+            pEvdev->transModTable[fromCode] = 0;
+            pEvdev->transModFreeze[fromCode] = 0;
+            pEvdev->ahmDelayTable[fromCode] = 0;
+            pEvdev->transModPressed[fromCode] = 0;
+            pEvdev->ahmTimePressed[fromCode] = 0;
+        }
 
-	/* set timeout for ahm */
-	pEvdev->ahmTimeout = xf86SetIntOption(pInfo->options, "AhmTimeout", 600);
-	pEvdev->lastEventTime.tv_sec = 0;
-	pEvdev->lastEventTime.tv_usec = 0;
+        /* set timeout for ahm */
+        pEvdev->ahmTimeout = xf86SetIntOption(pInfo->options, "AhmTimeout", 600);
+        pEvdev->lastEventTime.tv_sec = 0;
+        pEvdev->lastEventTime.tv_usec = 0;
 
-	pEvdev->ahmDelayedKeys = 0;
+        pEvdev->ahmDelayedKeys = 0;
 
-	pEvdev->ahmPaddingInterval = xf86SetIntOption(pInfo->options, "AhmPaddingInterval", 10);
-	/* Negative padding doesn't harm. */
-	pEvdev->ahmFreezeTT = xf86SetBoolOption(pInfo->options, "AhmFreezeTT", 1);
+        pEvdev->ahmPaddingInterval = xf86SetIntOption(pInfo->options, "AhmPaddingInterval", 10);
+        /* Negative padding doesn't harm. */
+        pEvdev->ahmFreezeTT = xf86SetBoolOption(pInfo->options, "AhmFreezeTT", 1);
 
-	pEvdev->ahmResetTime = xf86SetIntOption(pInfo->options, "AhmResetTime", 10);
+        pEvdev->ahmResetTime = xf86SetIntOption(pInfo->options, "AhmResetTime", 10);
 
-	/* parse "transMod" option */
-	str = xf86CheckStrOption(pInfo->options, "TransMod",NULL);
-	if(str){
-	  xf86Msg(X_CONFIG, "Option \"TransMod\" \"%s\"\n", str);
-	  toFree = str;
-	  next = str;
-	  while(next != NULL){
-	    fromCode = strtol(next, &end, 10);
-	    if (next == end){
-	      break;
-	    }
-	    if (*end != ':'){
-	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
-		      "Dest keycode is lacking; colon expected: %s\n",
-		      str);
-	      break;
-	    }
-	    end++;
-	    next = end;
-	    toCode = strtol(next, &end, 10);
-	    if(next == end){
-	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
-		      "Dest keycode is lacking: %s\n",
-			  str);
-	    }
-	    next = end;
-	    /* xxx do range check, and store */
-	    xf86IDrvMsg(pInfo, X_CONFIG, "TransMod: %i -> %i\n",
-			fromCode, toCode);
-	    if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
-	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
-			  "Keycode out of range: %i\n",
-			  fromCode);
-	      continue;
-	    }
-	    /* dest keycode has to be <= 255, due to X limit. */
-	    if((toCode < MIN_KEYCODE) || (toCode > 255)){
-	      xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
-			  "Keycode out of range: %i\n",
-			  toCode);
-	      continue;
-	    }
-	    pEvdev->transModTable[fromCode] = toCode;
-	  }
-	  free(toFree);
-	}
+        /* parse "transMod" option */
+        str = xf86CheckStrOption(pInfo->options, "TransMod",NULL);
+        if(str){
+            xf86Msg(X_CONFIG, "Option \"TransMod\" \"%s\"\n", str);
+            toFree = str;
+            next = str;
+            while(next != NULL){
+                fromCode = strtol(next, &end, 10);
+                if (next == end){
+                    break;
+                }
+                if (*end != ':'){
+                    xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+                                "Dest keycode is lacking; colon expected: %s\n",
+                                str);
+                    break;
+                }
+                end++;
+                next = end;
+                toCode = strtol(next, &end, 10);
+                if(next == end){
+                    xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+                                "Dest keycode is lacking: %s\n",
+                                str);
+                }
+                next = end;
+                /* xxx do range check, and store */
+                xf86IDrvMsg(pInfo, X_CONFIG, "TransMod: %i -> %i\n",
+                            fromCode, toCode);
+                if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
+                    xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+                                "Keycode out of range: %i\n",
+                                fromCode);
+                    continue;
+                }
+                /* dest keycode has to be <= 255, due to X limit. */
+                if((toCode < MIN_KEYCODE) || (toCode > 255)){
+                    xf86IDrvMsg(pInfo, X_ERROR, "TransMod : "
+                                "Keycode out of range: %i\n",
+                                toCode);
+                    continue;
+                }
+                pEvdev->transModTable[fromCode] = toCode;
+            }
+            free(toFree);
+        }
 
-	/* parse option "AhmDelay" */
-	str = xf86CheckStrOption(pInfo->options, "AhmDelay", NULL);
-	if(str){
-	  xf86Msg(X_CONFIG, "Option \"AhmDelay\" \"%s\"\n", str);
-	  toFree = str;
-	  next = str;
-	  while(next != NULL){
-	    fromCode = strtol(next, &end, 10);
-	    if (next == end){
-	      break;
-	    }
-	    next = end;
+        /* parse option "AhmDelay" */
+        str = xf86CheckStrOption(pInfo->options, "AhmDelay", NULL);
+        if(str){
+            xf86Msg(X_CONFIG, "Option \"AhmDelay\" \"%s\"\n", str);
+            toFree = str;
+            next = str;
+            while(next != NULL){
+                fromCode = strtol(next, &end, 10);
+                if (next == end){
+                    break;
+                }
+                next = end;
 
-	    /* do range check, and store */
-	    if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
-	      xf86IDrvMsg(pInfo, X_ERROR, "AhmDelay : "
-			  "Keycode out of range: %i\n",
-			  fromCode);
-	      continue;
-	    }
-	    if(pEvdev->transModTable[fromCode] == 0){
-	      xf86IDrvMsg(pInfo, X_WARNING, "warning: Delay key %i is not a transmod.\n", fromCode);
-	    }
-	    pEvdev->ahmDelayTable[fromCode] = 1;
-	  }
-	  free(toFree);
-	}
+                /* do range check, and store */
+                if((fromCode < MIN_KEYCODE) || (fromCode > 255)){
+                    xf86IDrvMsg(pInfo, X_ERROR, "AhmDelay : "
+                                "Keycode out of range: %i\n",
+                                fromCode);
+                    continue;
+                }
+                if(pEvdev->transModTable[fromCode] == 0){
+                    xf86IDrvMsg(pInfo, X_WARNING, "warning: Delay key %i is not a transmod.\n", fromCode);
+                }
+                pEvdev->ahmDelayTable[fromCode] = 1;
+            }
+            free(toFree);
+        }
 
-	/* end of parsing ahm options */
-      }
+        /* end of parsing ahm options */
+    }
 
     return Success;
 
@@ -3187,29 +3235,29 @@ EvdevUtilButtonEventToButtonNumber(EvdevPtr pEvdev, int code)
     switch (code)
     {
         /* Mouse buttons */
-        case BTN_LEFT:
-            return 1;
-        case BTN_MIDDLE:
-            return 2;
-        case BTN_RIGHT:
-            return 3;
-        case BTN_SIDE ... BTN_JOYSTICK - 1:
-            return 8 + code - BTN_SIDE;
+    case BTN_LEFT:
+        return 1;
+    case BTN_MIDDLE:
+        return 2;
+    case BTN_RIGHT:
+        return 3;
+    case BTN_SIDE ... BTN_JOYSTICK - 1:
+        return 8 + code - BTN_SIDE;
 
         /* Generic buttons */
-        case BTN_0 ... BTN_2:
-            return 1 + code - BTN_0;
-        case BTN_3 ... BTN_MOUSE - 1:
-            return 8 + code - BTN_3;
+    case BTN_0 ... BTN_2:
+        return 1 + code - BTN_0;
+    case BTN_3 ... BTN_MOUSE - 1:
+        return 8 + code - BTN_3;
 
         /* Tablet stylus buttons */
-        case BTN_TOUCH ... BTN_STYLUS2:
-            return 1 + code - BTN_TOUCH;
+    case BTN_TOUCH ... BTN_STYLUS2:
+        return 1 + code - BTN_TOUCH;
 
         /* The rest */
-        default:
-            /* Ignore */
-            return 0;
+    default:
+        /* Ignore */
+        return 0;
     }
 }
 
@@ -3345,15 +3393,15 @@ EvdevInitProperty(DeviceIntPtr dev)
         prop_invert = MakeAtom(EVDEV_PROP_INVERT_AXES, strlen(EVDEV_PROP_INVERT_AXES), TRUE);
 
         rc = XIChangeDeviceProperty(dev, prop_invert, XA_INTEGER, 8,
-                PropModeReplace, 2,
-                invert, FALSE);
+                                    PropModeReplace, 2,
+                                    invert, FALSE);
         if (rc != Success)
             return;
 
         XISetDevicePropertyDeletable(dev, prop_invert, FALSE);
 
         prop_calibration = MakeAtom(EVDEV_PROP_CALIBRATION,
-                strlen(EVDEV_PROP_CALIBRATION), TRUE);
+                                    strlen(EVDEV_PROP_CALIBRATION), TRUE);
         if (pEvdev->flags & EVDEV_CALIBRATED) {
             int calibration[4];
 
@@ -3363,12 +3411,12 @@ EvdevInitProperty(DeviceIntPtr dev)
             calibration[3] = pEvdev->calibration.max_y;
 
             rc = XIChangeDeviceProperty(dev, prop_calibration, XA_INTEGER,
-                    32, PropModeReplace, 4, calibration,
-                    FALSE);
+                                        32, PropModeReplace, 4, calibration,
+                                        FALSE);
         } else if (pEvdev->flags & EVDEV_ABSOLUTE_EVENTS) {
             rc = XIChangeDeviceProperty(dev, prop_calibration, XA_INTEGER,
-                    32, PropModeReplace, 0, NULL,
-                    FALSE);
+                                        32, PropModeReplace, 0, NULL,
+                                        FALSE);
         }
         if (rc != Success)
             return;
@@ -3376,10 +3424,10 @@ EvdevInitProperty(DeviceIntPtr dev)
         XISetDevicePropertyDeletable(dev, prop_calibration, FALSE);
 
         prop_swap = MakeAtom(EVDEV_PROP_SWAP_AXES,
-                strlen(EVDEV_PROP_SWAP_AXES), TRUE);
+                             strlen(EVDEV_PROP_SWAP_AXES), TRUE);
 
         rc = XIChangeDeviceProperty(dev, prop_swap, XA_INTEGER, 8,
-                PropModeReplace, 1, &pEvdev->swap_axes, FALSE);
+                                    PropModeReplace, 1, &pEvdev->swap_axes, FALSE);
         if (rc != Success)
             return;
 
